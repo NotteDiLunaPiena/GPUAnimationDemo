@@ -78,6 +78,9 @@
     <ClCompile Include="imGUI\imgui.cpp">
       <Filter>imGUI</Filter>
     </ClCompile>
+    <ClCompile Include="modelResource.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.h">
@@ -139,6 +142,9 @@
     </ClInclude>
     <ClInclude Include="imGUI\backends\imgui_impl_win32.h">
       <Filter>imGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="modelResource.h">
+      <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

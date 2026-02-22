@@ -15,13 +15,27 @@
 #pragma comment (lib, "assimp-vc143-mt.lib")
 
 #include "component.h"
+#include "renderer.h"
+
+class ModelResource;
+class AnimationPlayer;
+class Player;
+
+/*********************************************************************
+静的データ管理
+・モデルデータ
+・メッシュ
+・ボーン改装
+・GPUバッファ
+・描画
+**********************************************************************/
+
 
 //最大メッシュ数
 constexpr UINT MAX_MESHES = 32;
 //描画対数
 constexpr UINT MAX_INSTANCE_COUNT = 3000;
 
-class Player;
 
 // ボーン情報構造体
 struct BONE
@@ -79,45 +93,53 @@ private:
     ID3D11PixelShader* m_PixelShader = nullptr;
     ID3D11Buffer** m_VertexBufferGPU = nullptr;
 
+    //リソース
+    ModelResource* m_Resource;
+
     // 内部処理関数
-	//ボーンアニメーション関連
+    //ボーンアニメーション関連
     void CreateBone(aiNode* Node);
     void UpdateBoneMatrix(aiNode* Node, aiMatrix4x4 ParentMatrix);
     void UpdateLocalAnimationMatrix(aiNode* node);
 
-	//GPUスキニング関連
+    //GPUスキニング関連
     void CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex);
     void LoadComputeShader(const char* FileName);
     XMMATRIX ConvertAiMatrixToXMMatrix(const aiMatrix4x4& m);
 
+    VERTEX_3D* GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIndex);
+    AnimationPlayer* m_Player = nullptr;
 public:
-	//ロード
+    AnimationModel() :m_Resource(nullptr) {}
+
+    //ロード
     void Load(const char* FileName);
     void LoadAnimation(const char* FileName, const char* Name);
 
-	//更新
+    //更新
     void Update(const char* AnimationName1, int Frame1,
         const char* AnimationName2, int Frame2, float BlendRate);
     void UpdateInstanceData(const std::vector<Player*>& players);
 
-	//描画
+    //描画
     void Draw() override;
-	
+
     //解放
     void Uninit() override;
-    
-	//アニメーション情報取得
+
+    //アニメーション情報取得
     int GetAnimationDuration(const char* AnimationName) const;
     float GetAnimationCurrentFramePercentage(const char* AnimationName, int CurrentFrame) const;
 
-	//アニメーション操作
+    //アニメーション操作
     void AdvanceFrame(const char* AnimationName, int& CurrentFrame);
-	bool IsAnimationEnd(const char* AnimationName, int CurrentFrame);
+    bool IsAnimationEnd(const char* AnimationName, int CurrentFrame);
 
-	// インスタンス数取得
-	int GetTotalInstanceCount() const { return (int)(m_InstanceDataIdle.size() + m_InstanceDataRun.size()); };
+    // インスタンス数取得
+    int GetTotalInstanceCount() const { return (int)(m_InstanceDataIdle.size() + m_InstanceDataRun.size()); };
 
     //メッシュ数の取得
     int GetMeshCount() const;
+
 
 };

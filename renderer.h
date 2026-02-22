@@ -120,6 +120,8 @@ public:
 
 	static void CreateSkinningVertexShader(ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName);
 
+	static void CreateTexture(const char* FileName, ID3D11ShaderResourceView** TextureView);
+
 	static void ResetDrawCount();
 	static void AddDrawCall();
 	static int  GetDrawCallCount();
