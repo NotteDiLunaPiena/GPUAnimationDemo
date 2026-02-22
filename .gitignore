@@ -1,0 +1,25 @@
+# Visual Studio
+.vs/
+*.VC.db
+*.VC.opendb
+
+# ビルド生成物
+Debug/
+Release/
+x64/
+x86/
+
+# 一時ファイル / キャッシュ
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.idb
+*.log
+
+# 実行ファイル / DLL
+*.exe
+*.dll
+
+# ユーザー依存設定
+*.vcxproj.user
