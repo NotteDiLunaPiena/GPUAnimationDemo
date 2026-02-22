@@ -2,6 +2,7 @@
 #include "main.h"
 #include "renderer.h"
 #include <io.h>
+#include "texture.h"
 
 
 D3D_FEATURE_LEVEL       Renderer::m_FeatureLevel = D3D_FEATURE_LEVEL_11_0;
@@ -464,6 +465,14 @@ void Renderer::CreateSkinningVertexShader(ID3D11VertexShader** VertexShader, ID3
 
 	delete[] buffer;
 }
+
+// テクスチャの作成
+void Renderer::CreateTexture(const char* FileName, ID3D11ShaderResourceView** TextureView)
+{
+	// 既存の Texture クラスの Load 関数を使い、結果を TextureView に格納します
+	*TextureView = Texture::Load(FileName);
+}
+
 
 void Renderer::ResetDrawCount()
 {
