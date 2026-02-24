@@ -35,6 +35,12 @@ class Player;
 constexpr UINT MAX_MESHES = 32;
 //描画対数
 constexpr UINT MAX_INSTANCE_COUNT = 3000;
+//ボーン数
+constexpr UINT MAX_BONE_COUNT = 256;
+//スレッドグループサイズ
+constexpr UINT SKINNING_THREAD_GROUP_SIZE = 256;
+//ボーンウェイト数
+constexpr UINT MAX_BONE_INFLUENCE = 4;
 
 
 // ボーン情報構造体

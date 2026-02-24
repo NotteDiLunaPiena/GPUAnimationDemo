@@ -16,7 +16,7 @@ const aiScene* ModelResource::LoadModel(const char* fileName)
 
             ID3D11ShaderResourceView* srv = nullptr;
 
-            // ★FBX埋め込みテクスチャか確認
+            // FBX埋め込みテクスチャか確認
             const aiTexture* embedded = m_AiScene->GetEmbeddedTexture(path.C_Str());
             if (embedded) {
                 // メモリから読み込む処理
@@ -93,7 +93,7 @@ void ModelResource::CreateBuffers()
         aiMesh* mesh = m_AiScene->mMeshes[m];
         VERTEX_3D* vertices = new VERTEX_3D[mesh->mNumVertices];
 
-        // 1. 頂点データの初期化
+        // 頂点データの初期化
         for (unsigned int v = 0; v < mesh->mNumVertices; v++)
         {
             vertices[v].Position = XMFLOAT3(mesh->mVertices[v].x, mesh->mVertices[v].y, mesh->mVertices[v].z);
@@ -107,11 +107,15 @@ void ModelResource::CreateBuffers()
             }
             vertices[v].Diffuse = XMFLOAT4(1, 1, 1, 1);
 
-            for (int b = 0; b < 4; b++) { vertices[v].BoneIndex[b] = 0; vertices[v].BoneWeight[b] = 0.0f; }
+            for (int b = 0; b < MAX_BONE_INFLUENCE; b++)
+            { 
+                vertices[v].BoneIndex[b] = 0; 
+                vertices[v].BoneWeight[b] = 0.0f; 
+            }
         }
         ApplyBoneWeights(mesh, vertices);
 
-        // 2. 頂点バッファの作成
+        // 頂点バッファの作成
         D3D11_BUFFER_DESC vbd{};
         vbd.Usage = D3D11_USAGE_DEFAULT;
         vbd.ByteWidth = sizeof(VERTEX_3D) * mesh->mNumVertices;
@@ -120,7 +124,7 @@ void ModelResource::CreateBuffers()
         vsd.pSysMem = vertices;
         Renderer::GetDevice()->CreateBuffer(&vbd, &vsd, &m_VertexBuffer[m]);
 
-        // 3. インデックスデータの作成
+        // インデックスデータの作成
         unsigned int* indices = new unsigned int[mesh->mNumFaces * 3];
         for (unsigned int f = 0; f < mesh->mNumFaces; f++)
         {
@@ -129,7 +133,7 @@ void ModelResource::CreateBuffers()
             indices[f * 3 + 2] = mesh->mFaces[f].mIndices[2];
         }
 
-        // 4. インデックスバッファの作成
+        // インデックスバッファの作成
         D3D11_BUFFER_DESC ibd{};
         ibd.Usage = D3D11_USAGE_DEFAULT;
         ibd.ByteWidth = sizeof(unsigned int) * mesh->mNumFaces * 3;
@@ -142,6 +146,7 @@ void ModelResource::CreateBuffers()
         delete[] indices;
     }
 }
+
 //ボーンウェイト適用
 void ModelResource::ApplyBoneWeights(aiMesh* mesh, VERTEX_3D* vertices)
 {
