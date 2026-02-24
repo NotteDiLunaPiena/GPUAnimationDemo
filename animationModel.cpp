@@ -12,16 +12,14 @@ using namespace DirectX;
 
 void AnimationModel::Load(const char* FileName)
 {
-	// リソースの実体を作成（本来はマネージャーから受け取るのが理想）
+	// リソースの実体を作成
 	if (!m_Resource) m_Resource = new ModelResource();
-
-	// 1. リソースの読み込み（実体の生成が必要な場合はここで行う）
 	m_AiScene = m_Resource->LoadModel(FileName);
 	assert(m_AiScene);
 
 	UINT numMeshes = m_AiScene->mNumMeshes;
 
-	// 2. インスタンス固有のバッファ配列の確保
+	//インスタンス固有のバッファ配列の確保
 	m_VertexBuffer = new ID3D11Buffer * [numMeshes];
 	m_IndexBuffer = new ID3D11Buffer * [numMeshes];
 	m_SkinInputBuffer = new ID3D11Buffer * [numMeshes] {};
@@ -30,7 +28,7 @@ void AnimationModel::Load(const char* FileName)
 	m_SkinOutputUAV = new ID3D11UnorderedAccessView * [numMeshes] {};
 	m_VertexBufferGPU = new ID3D11Buffer * [numMeshes] {};
 
-	// 3. ボーン構造のコピー
+	// ボーン構造のコピー
 	m_Bone.clear();
 	CreateBone(m_AiScene->mRootNode); // 自分のBoneマップを構築
 	m_BoneNameToIndex = m_Resource->GetBoneNameToIndex();
@@ -43,7 +41,7 @@ void AnimationModel::Load(const char* FileName)
 		}
 	}
 
-	// 4. 定数バッファの作成
+	// 定数バッファの作成
 	{
 		struct CB_BONE_MATRIX { XMFLOAT4X4 BoneMatrix[256]; };
 		D3D11_BUFFER_DESC bd{};
@@ -54,7 +52,7 @@ void AnimationModel::Load(const char* FileName)
 		Renderer::GetDevice()->CreateBuffer(&bd, nullptr, &m_BoneConstantBuffer);
 	}
 
-	// 5. メッシュごとの固有バッファ（スキニング用）作成
+	// メッシュごとの固有バッファ（スキニング用）作成
 	for (unsigned int m = 0; m < numMeshes; m++)
 	{
 		aiMesh* mesh = m_AiScene->mMeshes[m];
@@ -73,7 +71,7 @@ void AnimationModel::Load(const char* FileName)
 		m_SkinOutputBuffer_Run[m] = nullptr;
 	}
 
-	// 6. シェーダーのロード
+	// シェーダーのロード
 	LoadComputeShader("shader\\skinningCS.cso");
 	Renderer::CreateSkinningVertexShader(&m_VertexShader, &m_VertexLayout, "shader\\skinningVS.cso");
 	Renderer::CreatePixelShader(&m_PixelShader, "shader\\skinningPS.cso");
@@ -156,13 +154,13 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 	//定数バッファの更新
 	D3D11_MAPPED_SUBRESOURCE ms;
 	Renderer::GetDeviceContext()->Map(m_BoneConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms);
-	struct CB_BONE_MATRIX { XMFLOAT4X4 BoneMatrix[256]; };
+	struct CB_BONE_MATRIX { XMFLOAT4X4 BoneMatrix[MAX_BONE_COUNT]; };
 	auto* cbBone = (CB_BONE_MATRIX*)ms.pData;
 
 	for (auto& pair : m_BoneNameToIndex)
 	{
 		unsigned int index = pair.second;
-		if (index >= 256) continue;
+		if (index >= MAX_BONE_COUNT) continue;
 
 		XMMATRIX mat = ConvertAiMatrixToXMMatrix(m_Bone[pair.first].Matrix);
 		XMStoreFloat4x4(&cbBone->BoneMatrix[index], XMMatrixTranspose(mat));
@@ -173,7 +171,7 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 	for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
 	{
 		UINT numVertices = m_AiScene->mMeshes[m]->mNumVertices;
-		UINT groupCount = (numVertices + 255) / 256;
+		UINT groupCount = (numVertices + SKINNING_THREAD_GROUP_SIZE - 1) / SKINNING_THREAD_GROUP_SIZE;
 
 		//ComputeShader と定数バッファをセット
 		Renderer::GetDeviceContext()->CSSetShader(m_SkinningCS, nullptr, 0);
@@ -588,7 +586,7 @@ VERTEX_3D* AnimationModel::GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIn
 		vertices[v].Diffuse = XMFLOAT4(1, 1, 1, 1);
 
 		// ボーン情報の初期化
-		for (int b = 0; b < 4; b++) {
+		for (int b = 0; b < MAX_BONE_INFLUENCE; b++) {
 			vertices[v].BoneIndex[b] = 0;
 			vertices[v].BoneWeight[b] = 0.0f;
 		}
@@ -605,7 +603,7 @@ VERTEX_3D* AnimationModel::GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIn
 			aiVertexWeight weight = bone->mWeights[w];
 			VERTEX_3D* target = &vertices[weight.mVertexId];
 
-			for (int i = 0; i < 4; i++)
+			for (int i = 0; i < MAX_BONE_INFLUENCE; i++)
 			{
 				if (target->BoneWeight[i] == 0.0f)
 				{
