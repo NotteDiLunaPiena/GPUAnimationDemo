@@ -115,6 +115,19 @@ private:
 
     VERTEX_3D* GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIndex);
     AnimationPlayer* m_Player = nullptr;
+
+    // AnimationModel クラス内に次のメンバ／メソッドを追加してください。
+    // map: アニメーション名 -> [meshIndex] -> [frameIndex] -> ID3D11Buffer*
+    std::unordered_map<std::string, std::vector<std::vector<ID3D11Buffer*>>> m_BakedBuffers;
+    // アニメーション毎に最後に Update() でセットされたフレーム番号（描画で参照）
+    std::unordered_map<std::string, int> m_LastBakedFrame;
+
+    // 保持しているベイクバッファを解放
+    void ReleaseBakedAnimations();
+
+    int m_ComputeDispatchCount = 0; // 今フレームのCSディスパッチ回数（アニメーションUpdate内で増やす）
+    std::unordered_map<std::string, bool> m_AnimationUsedBaked; // アニメ名 -> 
+
 public:
     AnimationModel() :m_Resource(nullptr) {}
 
@@ -147,5 +160,12 @@ public:
     //メッシュ数の取得
     int GetMeshCount() const;
 
+    void BakeAnimationToDisk(const char* AnimName, const char* OutFilePath);
+    // ベイクファイルを読み込む（ファイル形式は BakeAnimationToDisk と対応）
+    bool LoadBakedAnimation(const char* FilePath, const char* AnimName);
+
+    void ResetDebugCounters();
+    int GetComputeDispatchCount() const;
+    bool WasAnimationBakedThisFrame(const char* AnimName) const;
 
 };
