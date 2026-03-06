@@ -16,6 +16,7 @@
 
 #include "component.h"
 #include "renderer.h"
+#include "skeleton.h"
 
 class ModelResource;
 class AnimationPlayer;
@@ -43,13 +44,6 @@ constexpr UINT SKINNING_THREAD_GROUP_SIZE = 256;
 constexpr UINT MAX_BONE_INFLUENCE = 4;
 
 
-// ボーン情報構造体
-struct BONE
-{
-    aiMatrix4x4 Matrix;           // 現在の最終ボーン行列
-    aiMatrix4x4 AnimationMatrix;  // アニメーション変換行列（位置・回転・スケール）
-    aiMatrix4x4 OffsetMatrix;     // モデル空間→ボーン空間への逆変換
-};
 
 class AnimationModel : public Component
 {
@@ -100,23 +94,20 @@ private:
     ID3D11Buffer** m_VertexBufferGPU = nullptr;
 
     //リソース
-    ModelResource* m_Resource;
+    ModelResource* m_Resource = nullptr;
+    //プレイヤー
+    AnimationPlayer* m_Player = nullptr;
 
     // 内部処理関数
     //ボーンアニメーション関連
     void CreateBone(aiNode* Node);
-    void UpdateBoneMatrix(aiNode* Node, aiMatrix4x4 ParentMatrix);
-    void UpdateLocalAnimationMatrix(aiNode* node);
 
     //GPUスキニング関連
     void CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex);
     void LoadComputeShader(const char* FileName);
-    XMMATRIX ConvertAiMatrixToXMMatrix(const aiMatrix4x4& m);
 
     VERTEX_3D* GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIndex);
-    AnimationPlayer* m_Player = nullptr;
 
-    // AnimationModel クラス内に次のメンバ／メソッドを追加してください。
     // map: アニメーション名 -> [meshIndex] -> [frameIndex] -> ID3D11Buffer*
     std::unordered_map<std::string, std::vector<std::vector<ID3D11Buffer*>>> m_BakedBuffers;
     // アニメーション毎に最後に Update() でセットされたフレーム番号（描画で参照）
@@ -145,14 +136,6 @@ public:
 
     //解放
     void Uninit() override;
-
-    //アニメーション情報取得
-    int GetAnimationDuration(const char* AnimationName) const;
-    float GetAnimationCurrentFramePercentage(const char* AnimationName, int CurrentFrame) const;
-
-    //アニメーション操作
-    void AdvanceFrame(const char* AnimationName, int& CurrentFrame);
-    bool IsAnimationEnd(const char* AnimationName, int CurrentFrame);
 
     // インスタンス数取得
     int GetTotalInstanceCount() const { return (int)(m_InstanceDataIdle.size() + m_InstanceDataRun.size()); };

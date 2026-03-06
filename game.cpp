@@ -8,6 +8,7 @@
 #include "player.h"
 #include "sky.h"
 #include "animationModel.h"
+#include "animationPlayer.h"
 
 #include "imgui.h"
 
@@ -36,6 +37,7 @@ void Game::Init()
     m_SharedModel->LoadBakedAnimation("baked\\Idle.baked", "Idle");
     m_SharedModel->LoadBakedAnimation("baked\\Run.baked", "Run");
 
+    m_ModelPlayer = new AnimationPlayer();
 
     //プレイヤーを生成して共有モデルを渡す
     for (int i = 0; i < MAX_INSTANCE_COUNT; i++) {
@@ -74,7 +76,7 @@ void Game::Update()
     if (isDebugMode)
     {
         // Runアニメーションの長さを取得してスライダーを作る
-        int maxRun = m_SharedModel->GetAnimationDuration("Run");
+        int maxRun = m_ModelPlayer->GetAnimationDuration("Run");
         ImGui::SliderInt("Run Frame Bar", &debugFrame, 0, maxRun - 1);
 
         // 全プレイヤーを「走っているポーズ」かつ「スライダーのフレーム」に強制書き換え
@@ -101,8 +103,11 @@ void Game::Update()
     ImGui::Text("Model Count    : %d", m_SharedModel ? 1 : 0);
 
     if (m_SharedModel) {
+        //CSを使用した回数
         ImGui::Text("Compute Dispatches this frame: %d", m_SharedModel->GetComputeDispatchCount());
+        //Idelをどちらで表示しているか
         ImGui::Text("Idle: %s", m_SharedModel->WasAnimationBakedThisFrame("Idle") ? "BAKED" : "COMPUTE");
+        //Runをどちらで表示しているか
         ImGui::Text("Run : %s", m_SharedModel->WasAnimationBakedThisFrame("Run") ? "BAKED" : "COMPUTE");
     }
 

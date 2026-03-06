@@ -6,6 +6,7 @@
 #include "assimp/matrix4x4.h"
 #include <unordered_map>
 #include "animationModel.h"
+#include <map>
 #pragma comment (lib, "assimp-vc143-mt.lib")
 
 /*********************************************************************
@@ -47,6 +48,7 @@ public:
     ID3D11Buffer* GetVertexBuffer(int mesh) const { return m_VertexBuffer[mesh]; }
     ID3D11Buffer* GetIndexBuffer(int mesh) const { return m_IndexBuffer[mesh]; }
     const std::unordered_map<std::string, BONE>& GetBones() const { return m_Bone; }
+    std::unordered_map<std::string, BONE>& GetBones() { return m_Bone; }
     const std::unordered_map<std::string, UINT>& GetBoneNameToIndex() const { return m_BoneNameToIndex; }
     const aiScene* GetScene() const { return m_AiScene; }
 
@@ -55,12 +57,10 @@ public:
         return nullptr;
     }
 
-    const aiScene* GetAnimationScene(const std::string& name) const {
-        if (m_Animations.count(name) > 0) {
-            return m_Animations.at(name);
-        }
-        return nullptr; 
+    const aiScene* GetAnimationScene(const char* name) const
+    {
+        auto it = m_Animations.find(name);
+        if (it == m_Animations.end()) return nullptr;
+        return it->second;
     }
-
-
 };

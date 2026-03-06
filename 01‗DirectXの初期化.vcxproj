@@ -135,6 +135,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="animationModel.cpp" />
+    <ClCompile Include="animationPlayer.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="field.cpp" />
     <ClCompile Include="game.cpp" />
@@ -174,6 +175,7 @@
     <ClInclude Include="player.h" />
     <ClInclude Include="renderer.h" />
     <ClInclude Include="scene.h" />
+    <ClInclude Include="skeleton.h" />
     <ClInclude Include="sky.h" />
     <ClInclude Include="texture.h" />
     <ClInclude Include="utility.h" />

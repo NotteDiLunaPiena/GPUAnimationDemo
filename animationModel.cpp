@@ -7,122 +7,10 @@
 #include "vector3.h"
 #include "player.h"
 #include "modelResource.h"
+#include "animationPlayer.h"
 
-using namespace DirectX;
 
-bool AnimationModel::LoadBakedAnimation(const char* FilePath, const char* AnimName)
-{
-	if (!FilePath || !AnimName) return false;
-	FILE* f = fopen(FilePath, "rb");
-	if (!f) return false;
-
-	uint32_t meshCount = 0;
-	if (fread(&meshCount, sizeof(meshCount), 1, f) != 1) { fclose(f); return false; }
-
-	// ヘッダ情報を読む（各メッシュの vertexCount, frameCount, stride）
-	std::vector<uint32_t> vertexCounts(meshCount), frameCounts(meshCount), strides(meshCount);
-	for (uint32_t m = 0; m < meshCount; ++m)
-	{
-		if (fread(&vertexCounts[m], sizeof(uint32_t), 1, f) != 1) { fclose(f); return false; }
-		if (fread(&frameCounts[m], sizeof(uint32_t), 1, f) != 1) { fclose(f); return false; }
-		if (fread(&strides[m], sizeof(uint32_t), 1, f) != 1) { fclose(f); return false; }
-	}
-
-	// 簡易チェック：meshCount と現在のモデルのメッシュ数が一致すること（必須ではないが安全）
-	if (!m_AiScene || meshCount != (uint32_t)m_AiScene->mNumMeshes) {
-		// 不一致だと読み込みは危険なので中断
-		fclose(f);
-		return false;
-	}
-
-	ID3D11Device* device = Renderer::GetDevice();
-	if (!device) { fclose(f); return false; }
-
-	// メモリ確保：アニメーション名用の二重配列（mesh -> frames）
-	m_BakedBuffers[AnimName].assign(meshCount, std::vector<ID3D11Buffer*>());
-
-	// 全フレーム数はすべてのメッシュで同じはず（Bake時の実装に依存）
-	uint32_t frameCount = frameCounts[0];
-	for (uint32_t m = 0; m < meshCount; ++m) {
-		// 各メッシュについてフレーム数が一致することを確認
-		if (frameCounts[m] != frameCount) {
-			// 異なる場合はシンプルには失敗扱い
-			ReleaseBakedAnimations();
-			fclose(f);
-			return false;
-		}
-		// バッファ格納領域確保
-		m_BakedBuffers[AnimName][m].resize(frameCount, nullptr);
-	}
-
-	// ファイルは frame-major で書かれている（Bake時の実装と同順序）
-	for (uint32_t frame = 0; frame < frameCount; ++frame)
-	{
-		for (uint32_t m = 0; m < meshCount; ++m)
-		{
-			size_t bytes = sizeof(VERTEX_SKIN_OUT) * vertexCounts[m];
-			std::vector<uint8_t> tmp(bytes);
-			if (fread(tmp.data(), bytes, 1, f) != 1) {
-				ReleaseBakedAnimations();
-				fclose(f);
-				return false;
-			}
-
-			D3D11_BUFFER_DESC bd{};
-			bd.Usage = D3D11_USAGE_DEFAULT;
-			bd.ByteWidth = (UINT)bytes;
-			bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-			D3D11_SUBRESOURCE_DATA sd{};
-			sd.pSysMem = tmp.data();
-
-			HRESULT hr = device->CreateBuffer(&bd, &sd, &m_BakedBuffers[AnimName][m][frame]);
-			if (FAILED(hr)) {
-				ReleaseBakedAnimations();
-				fclose(f);
-				return false;
-			}
-		}
-	}
-
-	fclose(f);
-
-	// 初期フレームを 0 にセット
-	m_LastBakedFrame[AnimName] = 0;
-	return true;
-}
-
-void AnimationModel::ReleaseBakedAnimations()
-{
-	for (auto& pair : m_BakedBuffers)
-	{
-		for (auto& meshVec : pair.second)
-		{
-			for (auto* buf : meshVec) { if (buf) buf->Release(); }
-		}
-	}
-	m_BakedBuffers.clear();
-	m_LastBakedFrame.clear();
-}
-
-void AnimationModel::ResetDebugCounters()
-{
-	m_ComputeDispatchCount = 0;
-	m_AnimationUsedBaked.clear();
-}
-
-int AnimationModel::GetComputeDispatchCount() const
-{
-	return m_ComputeDispatchCount;
-}
-
-bool AnimationModel::WasAnimationBakedThisFrame(const char* AnimName) const
-{
-	if (!AnimName) return false;
-	auto it = m_AnimationUsedBaked.find(AnimName);
-	if (it == m_AnimationUsedBaked.end()) return false;
-	return it->second;
-}
-
+//アニメーションのロード
 void AnimationModel::Load(const char* FileName)
 {
 	// リソースの実体を作成
@@ -188,8 +76,11 @@ void AnimationModel::Load(const char* FileName)
 	LoadComputeShader("shader\\skinningCS.cso");
 	Renderer::CreateSkinningVertexShader(&m_VertexShader, &m_VertexLayout, "shader\\skinningVS.cso");
 	Renderer::CreatePixelShader(&m_PixelShader, "shader\\skinningPS.cso");
-}
 
+	if (!m_Player) 	m_Player = new AnimationPlayer();
+	m_Player->init(m_Resource);
+	
+}
 
 // アニメーション読み込み
 void AnimationModel::LoadAnimation(const char* FileName, const char* Name)
@@ -204,86 +95,27 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 	if (Anim1 && m_BakedBuffers.count(Anim1))
 	{
 		m_LastBakedFrame[Anim1] = Frame1;
-		m_AnimationUsedBaked[Anim1] = true; // ← ベイクを使った
+		m_AnimationUsedBaked[Anim1] = true; // ← ベイクを使ったらtrue
 		return;
 	}
 
 	std::string animName = Anim1 ? Anim1 : "";
 
-	//アニメーションの存在チェック
-	if (!Anim1 || !Anim2) return;
-	if (m_Animation.count(Anim1) == 0 || m_Animation.count(Anim2) == 0) return;
-	if (!m_Animation[Anim1]->HasAnimations() || !m_Animation[Anim2]->HasAnimations()) return;
-
-	//ボーンノードのローカル行列を初期化
-	UpdateLocalAnimationMatrix(m_AiScene->mRootNode);
-
-	//ブレンドするアニメーションの取得
-	aiAnimation* animation1 = m_Animation[Anim1]->mAnimations[0];
-	aiAnimation* animation2 = m_Animation[Anim2]->mAnimations[0];
-
-	//各ボーン更新
-	for (auto& pair : m_Bone)
+	if (m_Player) 
 	{
-		BONE* bone = &m_Bone[pair.first];
-
-		//アニメーションチャネルの検索
-		aiNodeAnim* nodeAnim1 = nullptr;
-		aiNodeAnim* nodeAnim2 = nullptr;
-
-		for (unsigned int c = 0; c < animation1->mNumChannels; c++)
-			if (animation1->mChannels[c]->mNodeName == aiString(pair.first))
-				nodeAnim1 = animation1->mChannels[c];
-
-		for (unsigned int c = 0; c < animation2->mNumChannels; c++)
-			if (animation2->mChannels[c]->mNodeName == aiString(pair.first))
-				nodeAnim2 = animation2->mChannels[c];
-
-		aiQuaternion rot1, rot2;
-		aiVector3D pos1, pos2;
-
-		//フレームの位置・回転を取得
-		if (nodeAnim1)
-		{
-			int f1 = Frame1 % nodeAnim1->mNumRotationKeys;
-			rot1 = nodeAnim1->mRotationKeys[f1].mValue;
-			pos1 = nodeAnim1->mPositionKeys[f1 % nodeAnim1->mNumPositionKeys].mValue;
-		}
-
-		if (nodeAnim2)
-		{
-			int f2 = Frame2 % nodeAnim2->mNumRotationKeys;
-			rot2 = nodeAnim2->mRotationKeys[f2].mValue;
-			pos2 = nodeAnim2->mPositionKeys[f2 % nodeAnim2->mNumPositionKeys].mValue;
-		}
-
-		//ブレンド計算
-		//LERP
-		aiVector3D pos = pos1 * (1.0f - BlendRate) + pos2 * BlendRate;
-		//SLERP
-		aiQuaternion rot; aiQuaternion::Interpolate(rot, rot1, rot2, BlendRate);
-
-		// アニメーション変換行列の作成
-		bone->AnimationMatrix = aiMatrix4x4(aiVector3D(1, 1, 1), rot, pos);
+		m_Player->CalculateBoneTransformBlended(Anim1, Frame1, Anim2, Frame2, BlendRate);
 	}
 
-	//最終的なボーン行列を計算
-	aiMatrix4x4 identityMatrix;
-	UpdateBoneMatrix(m_AiScene->mRootNode, identityMatrix);
-
-	//定数バッファの更新
 	D3D11_MAPPED_SUBRESOURCE ms;
 	Renderer::GetDeviceContext()->Map(m_BoneConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms);
 	struct CB_BONE_MATRIX { XMFLOAT4X4 BoneMatrix[MAX_BONE_COUNT]; };
 	auto* cbBone = (CB_BONE_MATRIX*)ms.pData;
-
-	for (auto& pair : m_BoneNameToIndex)
+	const auto& finals = m_Player->GetFinalBoneMatrices();
+	for (const auto& kv : m_BoneNameToIndex)
 	{
-		unsigned int index = pair.second;
+		unsigned int index = kv.second;
 		if (index >= MAX_BONE_COUNT) continue;
-
-		XMMATRIX mat = ConvertAiMatrixToXMMatrix(m_Bone[pair.first].Matrix);
-		XMStoreFloat4x4(&cbBone->BoneMatrix[index], XMMatrixTranspose(mat));
+		cbBone->BoneMatrix[index] = finals[index]; 
 	}
 	Renderer::GetDeviceContext()->Unmap(m_BoneConstantBuffer, 0);
 
@@ -605,39 +437,6 @@ void AnimationModel::CreateBone(aiNode* node)
 	}
 }
 
-// ボーン行列更新
-void AnimationModel::UpdateBoneMatrix(aiNode* node, aiMatrix4x4 ParentMatrix)
-{
-	BONE* bone = &m_Bone[node->mName.C_Str()];
-
-	//親の行列と自身のアニメーション行列を合成
-	aiMatrix4x4 GlobalTransform = ParentMatrix * bone->AnimationMatrix;
-
-	//スキニング用の最終ボーン行列を計算
-	bone->Matrix = GlobalTransform * bone->OffsetMatrix;
-
-	//子ノードへ再帰
-	for (unsigned int n = 0; n < node->mNumChildren; n++)
-		UpdateBoneMatrix(node->mChildren[n], GlobalTransform);
-}
-
-// ローカルアニメーション行列更新　（アニメーション適用前の初期化）
-void AnimationModel::UpdateLocalAnimationMatrix(aiNode* node)
-{
-
-	// ボーンがマップに存在する場合のみ
-	if (m_Bone.count(node->mName.C_Str()))
-	{
-		BONE& bone = m_Bone.at(node->mName.C_Str());
-
-		bone.AnimationMatrix = node->mTransformation;
-	}
-
-	// 子ノードへ再帰
-	for (unsigned int n = 0; n < node->mNumChildren; n++)
-		UpdateLocalAnimationMatrix(node->mChildren[n]);
-}
-
 // コンピュートシェーダ用スキニングバッファ作成
 void AnimationModel::CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex)
 {
@@ -719,17 +518,6 @@ void AnimationModel::LoadComputeShader(const char* FileName)
 	delete[] buffer;
 }
 
-// aiMatrix4x4をXMMATRIXに変換
-XMMATRIX AnimationModel::ConvertAiMatrixToXMMatrix(const aiMatrix4x4& m)
-{
-	return XMMATRIX(
-		m.a1, m.b1, m.c1, m.d1,
-		m.a2, m.b2, m.c2, m.d2,
-		m.a3, m.b3, m.c3, m.d3,
-		m.a4, m.b4, m.c4, m.d4
-	);
-}
-
 //頂点構造体の生成
 VERTEX_3D* AnimationModel::GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIndex)
 {
@@ -776,42 +564,6 @@ VERTEX_3D* AnimationModel::GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIn
 	return vertices;
 }
 
-// 指定アニメーションの総フレーム数を取得
-int AnimationModel::GetAnimationDuration(const char* AnimationName) const
-{
-	if (m_Animation.count(AnimationName) == 0) return 0;
-	const aiScene* scene = m_Animation.at(AnimationName);
-	if (!scene->HasAnimations()) return 0;
-	return (int)scene->mAnimations[0]->mDuration;
-}
-
-// 現在フレームの進行率（0.0〜1.0）を取得
-float AnimationModel::GetAnimationCurrentFramePercentage(const char* AnimationName, int CurrentFrame) const
-{
-	int duration = GetAnimationDuration(AnimationName);
-	if (duration <= 0) return 0.0f;
-	int normalized = CurrentFrame % duration;
-	return (float)normalized / duration;
-}
-
-// アニメーションフレームを1進める（ループ）
-void AnimationModel::AdvanceFrame(const char* AnimationName, int& CurrentFrame)
-{
-	int duration = GetAnimationDuration(AnimationName);
-	if (duration <= 0) return;
-
-	CurrentFrame = (CurrentFrame + 1) % duration;
-}
-
-// アニメーションが最終フレームに到達したか判定
-bool AnimationModel::IsAnimationEnd(const char* AnimationName, int CurrentFrame)
-{
-	int duration = GetAnimationDuration(AnimationName);
-	if (duration <= 0) return true;
-
-	return (CurrentFrame >= duration - 1);
-}
-
 //メッシュ数の取得
 int AnimationModel::GetMeshCount() const
 {
@@ -819,6 +571,7 @@ int AnimationModel::GetMeshCount() const
 	return (int)m_AiScene->mNumMeshes;
 }
 
+//アニメーションベイク作成
 void AnimationModel::BakeAnimationToDisk(const char* AnimName, const char* OutFilePath)
 {
 	if (!AnimName) return;
@@ -874,51 +627,28 @@ void AnimationModel::BakeAnimationToDisk(const char* AnimName, const char* OutFi
 	// フレームごとにボーン計算 → CS Dispatch → ステージングへコピー → ファイル書き込み
 	for (int frame = 0; frame < duration; ++frame)
 	{
-		// ローカル行列初期化
-		UpdateLocalAnimationMatrix(m_AiScene->mRootNode);
-
-		// 各ボーンのアニメーション行列計算（このロジックは Update() と同等）
-		for (auto& pair : m_Bone)
+		for (int frame = 0; frame < duration; ++frame)
 		{
-			BONE* bone = &m_Bone[pair.first];
-			aiNodeAnim* nodeAnim = nullptr;
-			for (unsigned int c = 0; c < animation->mNumChannels; c++)
-				if (animation->mChannels[c]->mNodeName == aiString(pair.first))
-					nodeAnim = animation->mChannels[c];
-
-			aiQuaternion rot;
-			aiVector3D pos;
-			if (nodeAnim)
-			{
-				int fidx = frame % nodeAnim->mNumRotationKeys;
-				rot = nodeAnim->mRotationKeys[fidx].mValue;
-				pos = nodeAnim->mPositionKeys[fidx % nodeAnim->mNumPositionKeys].mValue;
-			}
-			else
-			{
-				rot = aiQuaternion(); pos = aiVector3D(0,0,0);
-			}
-
-			bone->AnimationMatrix = aiMatrix4x4(aiVector3D(1,1,1), rot, pos);
+			m_Player->CalculateBoneTransform(AnimName,(float)frame);			
 		}
 
 		// グローバル行列計算
 		aiMatrix4x4 identity;
-		UpdateBoneMatrix(m_AiScene->mRootNode, identity);
+		//UpdateBoneMatrix(m_AiScene->mRootNode, identity);
 
 		// 定数バッファ更新（ボーン行列）
-		D3D11_MAPPED_SUBRESOURCE ms{};
-		ctx->Map(m_BoneConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms);
+		D3D11_MAPPED_SUBRESOURCE ms;
+		Renderer::GetDeviceContext()->Map(m_BoneConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms);
 		struct CB_BONE_MATRIX { XMFLOAT4X4 BoneMatrix[MAX_BONE_COUNT]; };
 		auto* cbBone = (CB_BONE_MATRIX*)ms.pData;
-		for (auto& pair : m_BoneNameToIndex)
+		const auto& finals = m_Player->GetFinalBoneMatrices();
+		for (const auto& kv : m_BoneNameToIndex)
 		{
-			unsigned int index = pair.second;
+			unsigned int index = kv.second;
 			if (index >= MAX_BONE_COUNT) continue;
-			XMMATRIX mat = ConvertAiMatrixToXMMatrix(m_Bone[pair.first].Matrix);
-			XMStoreFloat4x4(&cbBone->BoneMatrix[index], XMMatrixTranspose(mat));
+			cbBone->BoneMatrix[index] = finals[index];
 		}
-		ctx->Unmap(m_BoneConstantBuffer, 0);
+		Renderer::GetDeviceContext()->Unmap(m_BoneConstantBuffer, 0);
 
 		// 各メッシュで CS を実行して結果をステージングへコピーして書き出す
 		for (UINT m = 0; m < numMeshes; ++m)
@@ -959,3 +689,122 @@ void AnimationModel::BakeAnimationToDisk(const char* AnimName, const char* OutFi
 	// クリーンアップ
 	for (auto b : staging) if (b) b->Release();
 }
+
+//ベイクアニメーションのロード
+bool AnimationModel::LoadBakedAnimation(const char* FilePath, const char* AnimName)
+{
+	if (!FilePath || !AnimName) return false;
+	FILE* f = fopen(FilePath, "rb");
+	if (!f) return false;
+
+	uint32_t meshCount = 0;
+	if (fread(&meshCount, sizeof(meshCount), 1, f) != 1) { fclose(f); return false; }
+
+	// ヘッダ情報を読む（各メッシュの vertexCount, frameCount, stride）
+	std::vector<uint32_t> vertexCounts(meshCount), frameCounts(meshCount), strides(meshCount);
+	for (uint32_t m = 0; m < meshCount; ++m)
+	{
+		if (fread(&vertexCounts[m], sizeof(uint32_t), 1, f) != 1) { fclose(f); return false; }
+		if (fread(&frameCounts[m], sizeof(uint32_t), 1, f) != 1) { fclose(f); return false; }
+		if (fread(&strides[m], sizeof(uint32_t), 1, f) != 1) { fclose(f); return false; }
+	}
+
+	// 簡易チェック：meshCount と現在のモデルのメッシュ数が一致すること（必須ではないが安全）
+	if (!m_AiScene || meshCount != (uint32_t)m_AiScene->mNumMeshes) {
+		// 不一致だと読み込みは危険なので中断
+		fclose(f);
+		return false;
+	}
+
+	ID3D11Device* device = Renderer::GetDevice();
+	if (!device) { fclose(f); return false; }
+
+	// メモリ確保：アニメーション名用の二重配列（mesh -> frames）
+	m_BakedBuffers[AnimName].assign(meshCount, std::vector<ID3D11Buffer*>());
+
+	// 全フレーム数はすべてのメッシュで同じはず（Bake時の実装に依存）
+	uint32_t frameCount = frameCounts[0];
+	for (uint32_t m = 0; m < meshCount; ++m) {
+		// 各メッシュについてフレーム数が一致することを確認
+		if (frameCounts[m] != frameCount) {
+			// 異なる場合はシンプルには失敗扱い
+			ReleaseBakedAnimations();
+			fclose(f);
+			return false;
+		}
+		// バッファ格納領域確保
+		m_BakedBuffers[AnimName][m].resize(frameCount, nullptr);
+	}
+
+	// ファイルは frame-major で書かれている（Bake時の実装と同順序）
+	for (uint32_t frame = 0; frame < frameCount; ++frame)
+	{
+		for (uint32_t m = 0; m < meshCount; ++m)
+		{
+			size_t bytes = sizeof(VERTEX_SKIN_OUT) * vertexCounts[m];
+			std::vector<uint8_t> tmp(bytes);
+			if (fread(tmp.data(), bytes, 1, f) != 1) {
+				ReleaseBakedAnimations();
+				fclose(f);
+				return false;
+			}
+
+			D3D11_BUFFER_DESC bd{};
+			bd.Usage = D3D11_USAGE_DEFAULT;
+			bd.ByteWidth = (UINT)bytes;
+			bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+			D3D11_SUBRESOURCE_DATA sd{};
+			sd.pSysMem = tmp.data();
+
+			HRESULT hr = device->CreateBuffer(&bd, &sd, &m_BakedBuffers[AnimName][m][frame]);
+			if (FAILED(hr)) {
+				ReleaseBakedAnimations();
+				fclose(f);
+				return false;
+			}
+		}
+	}
+
+	fclose(f);
+
+	// 初期フレームを 0 にセット
+	m_LastBakedFrame[AnimName] = 0;
+	return true;
+}
+
+//ベイクアニメーションのフレーム
+bool AnimationModel::WasAnimationBakedThisFrame(const char* AnimName) const
+{
+	if (!AnimName) return false;
+	auto it = m_AnimationUsedBaked.find(AnimName);
+	if (it == m_AnimationUsedBaked.end()) return false;
+	return it->second;
+}
+
+//ベイクアニメーションの解放
+void AnimationModel::ReleaseBakedAnimations()
+{
+	for (auto& pair : m_BakedBuffers)
+	{
+		for (auto& meshVec : pair.second)
+		{
+			for (auto* buf : meshVec) { if (buf) buf->Release(); }
+		}
+	}
+	m_BakedBuffers.clear();
+	m_LastBakedFrame.clear();
+}
+
+//デバッグ時のカウンターのリセット
+void AnimationModel::ResetDebugCounters()
+{
+	m_ComputeDispatchCount = 0;
+	m_AnimationUsedBaked.clear();
+}
+
+//コンポーネントのデパッチの取得
+int AnimationModel::GetComputeDispatchCount() const
+{
+	return m_ComputeDispatchCount;
+}
+
