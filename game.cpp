@@ -23,6 +23,20 @@ void Game::Init()
     m_SharedModel->LoadAnimation("asset\\model\\Akai_Run.fbx", "Run");
     m_SharedModel->LoadAnimation("asset\\model\\Akai_Idle.fbx", "Idle");
 
+    // 出力ディレクトリがなければ作る（Winsdk が含まれている前提）
+    CreateDirectoryA("baked", NULL);
+
+    // 一度だけベイクする（重い処理なので本番では無効にするか、存在チェックを行う）
+    bool doBake = true;
+    if (doBake) {
+        m_SharedModel->BakeAnimationToDisk("Idle", "baked\\Idle.baked");
+        m_SharedModel->BakeAnimationToDisk("Run", "baked\\Run.baked");
+    }
+
+    m_SharedModel->LoadBakedAnimation("baked\\Idle.baked", "Idle");
+    m_SharedModel->LoadBakedAnimation("baked\\Run.baked", "Run");
+
+
     //プレイヤーを生成して共有モデルを渡す
     for (int i = 0; i < MAX_INSTANCE_COUNT; i++) {
         auto p = AddGameObject<Player>(1);
@@ -71,6 +85,8 @@ void Game::Update()
         }
     }
 
+    ImGui::End();
+
 	// レンダリング統計情報の表示
     ImGui::Begin("GPU Skinning Demo");
     //FPS
@@ -84,14 +100,23 @@ void Game::Update()
     //モデル読み込み対数
     ImGui::Text("Model Count    : %d", m_SharedModel ? 1 : 0);
 
-    ImGui::End();
+    if (m_SharedModel) {
+        ImGui::Text("Compute Dispatches this frame: %d", m_SharedModel->GetComputeDispatchCount());
+        ImGui::Text("Idle: %s", m_SharedModel->WasAnimationBakedThisFrame("Idle") ? "BAKED" : "COMPUTE");
+        ImGui::Text("Run : %s", m_SharedModel->WasAnimationBakedThisFrame("Run") ? "BAKED" : "COMPUTE");
+    }
+
 	ImGui::End();
+
 
     //アニメーション（行列）の更新
     float currentFrame = (float)players[0]->GetFrame();
 
-    m_SharedModel->Update("Idle", currentFrame, "Idle", currentFrame, 0.0f);
-    m_SharedModel->Update("Run", currentFrame, "Run", currentFrame, 0.0f);
+    // フレーム開始時に AnimationModel のデバッグカウンタをリセット
+    if (m_SharedModel) m_SharedModel->ResetDebugCounters();
+
+    m_SharedModel->Update("Idle", (int)currentFrame, "Idle", (int)currentFrame, 0.0f);
+    m_SharedModel->Update("Run", (int)currentFrame, "Run", (int)currentFrame, 0.0f);
 
     //描画データの更新
     m_SharedModel->UpdateInstanceData(players);
