@@ -115,8 +115,8 @@ void Game::Update()
     // フレーム開始時に AnimationModel のデバッグカウンタをリセット
     if (m_SharedModel) m_SharedModel->ResetDebugCounters();
 
-    m_SharedModel->Update("Idle", currentFrame, "Idle", currentFrame, 0.0f);
-    m_SharedModel->Update("Run", currentFrame, "Run", currentFrame, 0.0f);
+    m_SharedModel->Update("Idle", (int)currentFrame, "Idle", (int)currentFrame, 0.0f);
+    m_SharedModel->Update("Run", (int)currentFrame, "Run", (int)currentFrame, 0.0f);
 
     //描画データの更新
     m_SharedModel->UpdateInstanceData(players);
