@@ -54,7 +54,7 @@ const aiScene* ModelResource::LoadModel(const char* fileName)
 
 //アニメーションの読み込み
 void ModelResource::LoadAnimation(const char* fileName, const char* animName) {
-    // 既に同じ名前で登録されていたら何もしない（二重ロード防止）
+    // 既に同じ名前で登録されていたら何もしない
     if (m_Animations.count(animName) > 0) return;
 
     // アシンプでアニメーションファイルを読み込む
@@ -178,6 +178,7 @@ void ModelResource::ApplyBoneWeights(aiMesh* mesh, VERTEX_3D* vertices)
     }
 }
 
+//リソースの解放
 void ModelResource::Uninit()
 {
     for (auto& pair : m_Animations) {

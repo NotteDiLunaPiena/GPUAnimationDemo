@@ -1,7 +1,7 @@
 ﻿#include "animationPlayer.h"
 #include "modelResource.h"
 
-// CalculateBoneTransform 
+
 void AnimationPlayer::CalculateBoneTransform(const std::string& animName, float time)
 {
     if (!m_Resource) return;

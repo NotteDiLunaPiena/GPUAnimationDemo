@@ -100,7 +100,7 @@ private:
 
     // 内部処理関数
     //ボーンアニメーション関連
-    void CreateBone(aiNode* Node);
+    
 
     //GPUスキニング関連
     void CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex);
@@ -124,7 +124,6 @@ public:
 
     //ロード
     void Load(const char* FileName);
-    void LoadAnimation(const char* FileName, const char* Name);
 
     //更新
     void Update(const char* AnimationName1, int Frame1,

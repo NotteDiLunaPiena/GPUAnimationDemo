@@ -9,6 +9,7 @@
 #include "sky.h"
 #include "animationModel.h"
 #include "animationPlayer.h"
+#include "modelResource.h"
 
 #include "imgui.h"
 
@@ -21,8 +22,8 @@ void Game::Init()
     // 共有アニメーションモデルを1回だけ作成
     m_SharedModel = new AnimationModel();
     m_SharedModel->Load("asset\\model\\Akai.fbx");
-    m_SharedModel->LoadAnimation("asset\\model\\Akai_Run.fbx", "Run");
-    m_SharedModel->LoadAnimation("asset\\model\\Akai_Idle.fbx", "Idle");
+    m_ModelResource->LoadAnimation("asset\\model\\Akai_Run.fbx", "Run");
+    m_ModelResource->LoadAnimation("asset\\model\\Akai_Idle.fbx", "Idle");
 
     // 出力ディレクトリがなければ作る（Winsdk が含まれている前提）
     CreateDirectoryA("baked", NULL);

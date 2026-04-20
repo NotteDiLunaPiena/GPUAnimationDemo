@@ -31,7 +31,7 @@ void AnimationModel::Load(const char* FileName)
 
 	// ボーン構造のコピー
 	m_Bone.clear();
-	CreateBone(m_AiScene->mRootNode); // 自分のBoneマップを構築
+	m_Resource->GetBones().swap(m_Bone); // リソース側のボーン構造
 	m_BoneNameToIndex = m_Resource->GetBoneNameToIndex();
 
 	auto& resBones = m_Resource->GetBones();
@@ -80,13 +80,6 @@ void AnimationModel::Load(const char* FileName)
 	if (!m_Player) 	m_Player = new AnimationPlayer();
 	m_Player->init(m_Resource);
 	
-}
-
-// アニメーション読み込み
-void AnimationModel::LoadAnimation(const char* FileName, const char* Name)
-{
-	m_Animation[Name] = aiImportFile(FileName, aiProcess_ConvertToLeftHanded);
-	assert(m_Animation[Name]);
 }
 
 // アニメーション更新
@@ -424,19 +417,6 @@ void AnimationModel::Uninit()
 	m_Animation.clear();
 }
 
-// ボーンデータ作成 ノード名＝ボーン名として登録
-void AnimationModel::CreateBone(aiNode* node)
-{
-	BONE bone;
-	m_Bone[node->mName.C_Str()] = bone;
-
-	// 子ノードへ再帰
-	for (unsigned int n = 0; n < node->mNumChildren; n++)
-	{
-		CreateBone(node->mChildren[n]);
-	}
-}
-
 // コンピュートシェーダ用スキニングバッファ作成
 void AnimationModel::CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex)
 {
@@ -627,14 +607,10 @@ void AnimationModel::BakeAnimationToDisk(const char* AnimName, const char* OutFi
 	// フレームごとにボーン計算 → CS Dispatch → ステージングへコピー → ファイル書き込み
 	for (int frame = 0; frame < duration; ++frame)
 	{
-		for (int frame = 0; frame < duration; ++frame)
-		{
-			m_Player->CalculateBoneTransform(AnimName,(float)frame);			
-		}
+		m_Player->CalculateBoneTransform(AnimName,(float)frame);			
 
 		// グローバル行列計算
 		aiMatrix4x4 identity;
-		//UpdateBoneMatrix(m_AiScene->mRootNode, identity);
 
 		// 定数バッファ更新（ボーン行列）
 		D3D11_MAPPED_SUBRESOURCE ms;
