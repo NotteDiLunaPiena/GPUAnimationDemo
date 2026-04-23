@@ -8,6 +8,7 @@
 #include "player.h"
 #include "sky.h"
 #include "animationModel.h"
+#include "animationPlayer.h"
 
 #include "imgui.h"
 
@@ -22,6 +23,8 @@ void Game::Init()
     m_SharedModel->Load("asset\\model\\Akai.fbx");
     m_SharedModel->LoadAnimation("asset\\model\\Akai_Run.fbx", "Run");
     m_SharedModel->LoadAnimation("asset\\model\\Akai_Idle.fbx", "Idle");
+
+    m_APlayer = new AnimationPlayer();
 
     // 出力ディレクトリがなければ作る（Winsdk が含まれている前提）
     CreateDirectoryA("baked", NULL);
@@ -74,7 +77,7 @@ void Game::Update()
     if (isDebugMode)
     {
         // Runアニメーションの長さを取得してスライダーを作る
-        int maxRun = m_SharedModel->GetAnimationDuration("Run");
+        int maxRun = m_APlayer->GetAnimationDuration("Run");
         ImGui::SliderInt("Run Frame Bar", &debugFrame, 0, maxRun - 1);
 
         // 全プレイヤーを「走っているポーズ」かつ「スライダーのフレーム」に強制書き換え

@@ -56,7 +56,6 @@ class AnimationModel : public Component
 private:
     // モデル・アニメーションデータ
     const aiScene* m_AiScene = nullptr;
-    std::unordered_map<std::string, const aiScene*> m_Animation;
     int m_IdleCount = 0;
     int m_RunCount = 0;
 
@@ -67,8 +66,6 @@ private:
     std::unordered_map<std::string, ID3D11ShaderResourceView*> m_Texture;
 
     // ボーンデータ
-    std::unordered_map<std::string, BONE> m_Bone;
-    std::unordered_map<std::string, unsigned int> m_BoneNameToIndex;
     ID3D11Buffer* m_BoneConstantBuffer = nullptr;
 
     // スキニング用バッファ
@@ -100,13 +97,12 @@ private:
     ID3D11Buffer** m_VertexBufferGPU = nullptr;
 
     //リソース
-    ModelResource* m_Resource;
+    ModelResource* m_Resource = nullptr;
+    AnimationPlayer* m_Player = nullptr;
 
     // 内部処理関数
     //ボーンアニメーション関連
     void CreateBone(aiNode* Node);
-    void UpdateBoneMatrix(aiNode* Node, aiMatrix4x4 ParentMatrix);
-    void UpdateLocalAnimationMatrix(aiNode* node);
 
     //GPUスキニング関連
     void CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex);
@@ -114,10 +110,8 @@ private:
     XMMATRIX ConvertAiMatrixToXMMatrix(const aiMatrix4x4& m);
 
     VERTEX_3D* GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIndex);
-    AnimationPlayer* m_Player = nullptr;
 
     // AnimationModel クラス内に次のメンバ／メソッドを追加してください。
-    // map: アニメーション名 -> [meshIndex] -> [frameIndex] -> ID3D11Buffer*
     std::unordered_map<std::string, std::vector<std::vector<ID3D11Buffer*>>> m_BakedBuffers;
     // アニメーション毎に最後に Update() でセットされたフレーム番号（描画で参照）
     std::unordered_map<std::string, int> m_LastBakedFrame;
@@ -126,7 +120,7 @@ private:
     void ReleaseBakedAnimations();
 
     int m_ComputeDispatchCount = 0; // 今フレームのCSディスパッチ回数（アニメーションUpdate内で増やす）
-    std::unordered_map<std::string, bool> m_AnimationUsedBaked; // アニメ名 -> 
+    std::unordered_map<std::string, bool> m_AnimationUsedBaked; 
 
 public:
     AnimationModel() :m_Resource(nullptr) {}
@@ -136,8 +130,7 @@ public:
     void LoadAnimation(const char* FileName, const char* Name);
 
     //更新
-    void Update(const char* AnimationName1, int Frame1,
-        const char* AnimationName2, int Frame2, float BlendRate);
+    void Update(const char* AnimationName1, int Frame1, const char* AnimationName2, int Frame2, float BlendRate);
     void UpdateInstanceData(const std::vector<Player*>& players);
 
     //描画
@@ -146,14 +139,6 @@ public:
     //解放
     void Uninit() override;
 
-    //アニメーション情報取得
-    int GetAnimationDuration(const char* AnimationName) const;
-    float GetAnimationCurrentFramePercentage(const char* AnimationName, int CurrentFrame) const;
-
-    //アニメーション操作
-    void AdvanceFrame(const char* AnimationName, int& CurrentFrame);
-    bool IsAnimationEnd(const char* AnimationName, int CurrentFrame);
-
     // インスタンス数取得
     int GetTotalInstanceCount() const { return (int)(m_InstanceDataIdle.size() + m_InstanceDataRun.size()); };
 
@@ -161,11 +146,13 @@ public:
     int GetMeshCount() const;
 
     void BakeAnimationToDisk(const char* AnimName, const char* OutFilePath);
-    // ベイクファイルを読み込む（ファイル形式は BakeAnimationToDisk と対応）
+    // ベイクファイルを読み込む
     bool LoadBakedAnimation(const char* FilePath, const char* AnimName);
 
     void ResetDebugCounters();
     int GetComputeDispatchCount() const;
     bool WasAnimationBakedThisFrame(const char* AnimName) const;
+
+
 
 };
