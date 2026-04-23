@@ -135,6 +135,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="animationModel.cpp" />
+    <ClCompile Include="animationPlayer.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="field.cpp" />
     <ClCompile Include="game.cpp" />
