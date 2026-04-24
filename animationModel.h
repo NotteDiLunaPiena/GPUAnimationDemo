@@ -51,6 +51,14 @@ struct BONE
     aiMatrix4x4 OffsetMatrix;     // モデル空間→ボーン空間への逆変換
 };
 
+//スキニング方式の選択
+enum class SkinningMode
+{
+    ComputeShader,
+    VertexShader
+};
+
+
 class AnimationModel : public Component
 {
 private:
@@ -90,11 +98,27 @@ private:
     //インスタンス描画評価用カウント
     int m_InstanceCount;
 
-    // シェーダ関連
-    ID3D11InputLayout* m_VertexLayout = nullptr;
-    ID3D11VertexShader* m_VertexShader = nullptr;
-    ID3D11PixelShader* m_PixelShader = nullptr;
-    ID3D11Buffer** m_VertexBufferGPU = nullptr;
+    // -------------------------------------------------------
+    // CS パス用シェーダー（既存）
+    // -------------------------------------------------------
+    ID3D11InputLayout* m_CS_VertexLayout = nullptr;  // CS出力頂点(VERTEX_SKIN_OUT)用
+    ID3D11VertexShader* m_CS_VertexShader = nullptr;  // CSSkinningVS
+    ID3D11PixelShader* m_CS_PixelShader = nullptr;  // CSSkinningPS
+    ID3D11Buffer** m_CS_VertexBufferGPU = nullptr;
+
+    // -------------------------------------------------------
+    // VS パス用シェーダー（新規）
+    // -------------------------------------------------------
+    ID3D11InputLayout* m_VS_VertexLayout = nullptr; // VERTEX_3D（BoneIndex/Weight付き）用
+    ID3D11VertexShader* m_VS_VertexShader = nullptr; // VSSkinningVS
+    ID3D11PixelShader* m_VS_PixelShader = nullptr; // VSSkinningPS
+    ID3D11Buffer* m_BoneConstantBuffer_Idle = nullptr;
+    ID3D11Buffer* m_BoneConstantBuffer_Run = nullptr;
+
+    // -------------------------------------------------------
+    // 現在のスキニング方式（デフォルトは CS）
+    // -------------------------------------------------------
+    SkinningMode m_SkinningMode = SkinningMode::ComputeShader;
 
     //リソース
     ModelResource* m_Resource = nullptr;
@@ -122,6 +146,11 @@ private:
     int m_ComputeDispatchCount = 0; // 今フレームのCSディスパッチ回数（アニメーションUpdate内で増やす）
     std::unordered_map<std::string, bool> m_AnimationUsedBaked; 
 
+    // 内部描画ヘルパー（モード別）
+    void DrawCS();  // CS パスの描画処理
+    void DrawVS();  // VS パスの描画処理
+
+
 public:
     AnimationModel() :m_Resource(nullptr) {}
 
@@ -138,6 +167,10 @@ public:
 
     //解放
     void Uninit() override;
+
+    // スキニング方式の切り替え
+    void SetSkinningMode(SkinningMode mode) { m_SkinningMode = mode; }
+    SkinningMode GetSkinningMode() const { return m_SkinningMode; }
 
     // インスタンス数取得
     int GetTotalInstanceCount() const { return (int)(m_InstanceDataIdle.size() + m_InstanceDataRun.size()); };
