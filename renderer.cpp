@@ -424,7 +424,7 @@ void Renderer::CreatePixelShader( ID3D11PixelShader** PixelShader, const char* F
 }
 
 // スキニング頂点シェーダーの作成
-void Renderer::CreateSkinningVertexShader(ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName)
+void Renderer::CreateCSSkinningVertexShader(ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName)
 {
 	// シェーダーファイル読み込み
 	FILE* file;
