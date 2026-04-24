@@ -41,7 +41,7 @@ void Game::Init()
 
 
     //プレイヤーを生成して共有モデルを渡す
-    for (int i = 0; i < MAX_INSTANCE_COUNT; i++) {
+    for (int i = 0; i < 3; i++) {
         auto p = AddGameObject<Player>(1);
 		p->SetID(i);
         p->SetPosition({ (float)(i % 50) * 2.0f, 0.0f, (float)(i / 50) * 2.0f });
@@ -107,6 +107,27 @@ void Game::Update()
         ImGui::Text("Compute Dispatches this frame: %d", m_SharedModel->GetComputeDispatchCount());
         ImGui::Text("Idle: %s", m_SharedModel->WasAnimationBakedThisFrame("Idle") ? "BAKED" : "COMPUTE");
         ImGui::Text("Run : %s", m_SharedModel->WasAnimationBakedThisFrame("Run") ? "BAKED" : "COMPUTE");
+    
+        // ★ スキニング方式の切り替えUI
+        ImGui::Separator();
+        ImGui::Text("Skinning Mode:");
+
+        SkinningMode currentMode = m_SharedModel->GetSkinningMode();
+        bool useCS = (currentMode == SkinningMode::ComputeShader);
+        bool useVS = (currentMode == SkinningMode::VertexShader);
+
+        // ラジオボタンで排他的に選択
+        if (ImGui::RadioButton("ComputeShader", useCS))
+            m_SharedModel->SetSkinningMode(SkinningMode::ComputeShader);
+
+        ImGui::SameLine();
+
+        if (ImGui::RadioButton("VertexShader", useVS))
+            m_SharedModel->SetSkinningMode(SkinningMode::VertexShader);
+
+        // ★ 現在のモードを文字で表示
+        ImGui::Text("Current: %s",
+            currentMode == SkinningMode::ComputeShader ? "CS Skinning" : "VS Skinning");
     }
 
 	ImGui::End();

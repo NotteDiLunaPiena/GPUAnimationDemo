@@ -166,10 +166,13 @@
     <FxCompile Include="shader\skinningPS.hlsl">
       <Filter>shader</Filter>
     </FxCompile>
-    <FxCompile Include="shader\skinningVS.hlsl">
+    <FxCompile Include="shader\CSSkinningCS.hlsl">
       <Filter>shader</Filter>
     </FxCompile>
-    <FxCompile Include="shader\skinningCS.hlsl">
+    <FxCompile Include="shader\CSSkinningVS.hlsl">
+      <Filter>shader</Filter>
+    </FxCompile>
+    <FxCompile Include="shader\VSSkinningVS.hlsl">
       <Filter>shader</Filter>
     </FxCompile>
   </ItemGroup>
