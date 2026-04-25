@@ -66,6 +66,8 @@ struct VS_IN
     float4 InstanceWorldRow1 : INSTANCE1;
     float4 InstanceWorldRow2 : INSTANCE2;
     float4 InstanceWorldRow3 : INSTANCE3;
+	
+    float4 InstanceExtra : INSTANCE4;
 };
 
 struct PS_IN
