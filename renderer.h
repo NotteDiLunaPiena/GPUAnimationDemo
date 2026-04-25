@@ -34,6 +34,7 @@ struct InstanceData
 	DirectX::XMFLOAT4X4 World; // 各インスタンスのワールド行列
 	UINT AnimationIndex;       // アニメーション種類 (0=Idle, 1=Run)
 	float Frame;               // 現在のフレーム番号
+	float Duration;            // アニメーションの総フレーム数
 	float Padding[2];          // 16バイトアライメントを保つためのダミー
 };
 
@@ -116,6 +117,7 @@ public:
 	static ID3D11DeviceContext* GetDeviceContext(void) { return m_DeviceContext; }
 
 	static void CreateVertexShader(ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName);
+	static void CreateVSSkinningVertexShader(ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName);
 	static void CreatePixelShader(ID3D11PixelShader** PixelShader, const char* FileName);
 
 	static void CreateCSSkinningVertexShader(ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName);

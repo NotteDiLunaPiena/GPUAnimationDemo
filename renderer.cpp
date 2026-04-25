@@ -1,4 +1,4 @@
-
+ï»¿
 #include "main.h"
 #include "renderer.h"
 #include <io.h>
@@ -30,7 +30,7 @@ ID3D11BlendState*		Renderer::m_BlendStateATC{};
 static int s_DrawCallCount = 0;
 
 
-//DirectX‚Ì‰Šú‰»ˆ—‚ª“ü‚Á‚Ä‚é
+//DirectXã®åˆæœŸåŒ–å‡¦ç†ãŒå…¥ã£ã¦ã‚‹
 void Renderer::Init()
 {
 	HRESULT hr = S_OK;
@@ -38,7 +38,7 @@ void Renderer::Init()
 
 
 
-	// ƒfƒoƒCƒXAƒXƒƒbƒvƒ`ƒF[ƒ“ì¬
+	// ãƒ‡ãƒã‚¤ã‚¹ã€ã‚¹ãƒ¯ãƒƒãƒ—ãƒã‚§ãƒ¼ãƒ³ä½œæˆ
 	DXGI_SWAP_CHAIN_DESC swapChainDesc{};
 	swapChainDesc.BufferCount = 1;
 	swapChainDesc.BufferDesc.Width = SCREEN_WIDTH;
@@ -70,14 +70,14 @@ void Renderer::Init()
 
 
 
-	// ƒŒƒ“ƒ_[ƒ^[ƒQƒbƒgƒrƒ…[ì¬
+	// ãƒ¬ãƒ³ãƒ€ãƒ¼ã‚¿ãƒ¼ã‚²ãƒƒãƒˆãƒ“ãƒ¥ãƒ¼ä½œæˆ
 	ID3D11Texture2D* renderTarget{};
 	m_SwapChain->GetBuffer( 0, __uuidof( ID3D11Texture2D ), ( LPVOID* )&renderTarget );
 	m_Device->CreateRenderTargetView( renderTarget, NULL, &m_RenderTargetView );
 	renderTarget->Release();
 
 
-	// ƒfƒvƒXƒXƒeƒ“ƒVƒ‹ƒoƒbƒtƒ@ì¬
+	// ãƒ‡ãƒ—ã‚¹ã‚¹ãƒ†ãƒ³ã‚·ãƒ«ãƒãƒƒãƒ•ã‚¡ä½œæˆ
 	ID3D11Texture2D* depthStencile{};
 	D3D11_TEXTURE2D_DESC textureDesc{};
 	textureDesc.Width = swapChainDesc.BufferDesc.Width;
@@ -92,7 +92,7 @@ void Renderer::Init()
 	textureDesc.MiscFlags = 0;
 	m_Device->CreateTexture2D(&textureDesc, NULL, &depthStencile);
 
-	// ƒfƒvƒXƒXƒeƒ“ƒVƒ‹ƒrƒ…[ì¬
+	// ãƒ‡ãƒ—ã‚¹ã‚¹ãƒ†ãƒ³ã‚·ãƒ«ãƒ“ãƒ¥ãƒ¼ä½œæˆ
 	D3D11_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc{};
 	depthStencilViewDesc.Format = textureDesc.Format;
 	depthStencilViewDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
@@ -107,7 +107,7 @@ void Renderer::Init()
 
 
 
-	// ƒrƒ…[ƒ|[ƒgİ’è
+	// ãƒ“ãƒ¥ãƒ¼ãƒãƒ¼ãƒˆè¨­å®š
 	D3D11_VIEWPORT viewport;
 	viewport.Width = (FLOAT)SCREEN_WIDTH;
 	viewport.Height = (FLOAT)SCREEN_HEIGHT;
@@ -119,7 +119,7 @@ void Renderer::Init()
 
 
 
-	// ƒ‰ƒXƒ^ƒ‰ƒCƒUƒXƒe[ƒgİ’è
+	// ãƒ©ã‚¹ã‚¿ãƒ©ã‚¤ã‚¶ã‚¹ãƒ†ãƒ¼ãƒˆè¨­å®š
 	D3D11_RASTERIZER_DESC rasterizerDesc{};
 	rasterizerDesc.FillMode = D3D11_FILL_SOLID; 
 	rasterizerDesc.CullMode = D3D11_CULL_BACK; 
@@ -134,7 +134,7 @@ void Renderer::Init()
 
 
 
-	// ƒuƒŒƒ“ƒhƒXƒe[ƒgİ’è
+	// ãƒ–ãƒ¬ãƒ³ãƒ‰ã‚¹ãƒ†ãƒ¼ãƒˆè¨­å®š
 	D3D11_BLEND_DESC blendDesc{};
 	blendDesc.AlphaToCoverageEnable = FALSE;
 	blendDesc.IndependentBlendEnable = FALSE;
@@ -159,25 +159,25 @@ void Renderer::Init()
 
 
 
-	// ƒfƒvƒXƒXƒeƒ“ƒVƒ‹ƒXƒe[ƒgİ’è
+	// ãƒ‡ãƒ—ã‚¹ã‚¹ãƒ†ãƒ³ã‚·ãƒ«ã‚¹ãƒ†ãƒ¼ãƒˆè¨­å®š
 	D3D11_DEPTH_STENCIL_DESC depthStencilDesc{};
 	depthStencilDesc.DepthEnable = TRUE;
 	depthStencilDesc.DepthWriteMask	= D3D11_DEPTH_WRITE_MASK_ALL;
 	depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 	depthStencilDesc.StencilEnable = FALSE;
 
-	m_Device->CreateDepthStencilState( &depthStencilDesc, &m_DepthStateEnable );//[“x—LŒøƒXƒe[ƒg
+	m_Device->CreateDepthStencilState( &depthStencilDesc, &m_DepthStateEnable );//æ·±åº¦æœ‰åŠ¹ã‚¹ãƒ†ãƒ¼ãƒˆ
 
 	//depthStencilDesc.DepthEnable = FALSE;
 	depthStencilDesc.DepthWriteMask	= D3D11_DEPTH_WRITE_MASK_ZERO;
-	m_Device->CreateDepthStencilState( &depthStencilDesc, &m_DepthStateDisable );//[“x–³ŒøƒXƒe[ƒg
+	m_Device->CreateDepthStencilState( &depthStencilDesc, &m_DepthStateDisable );//æ·±åº¦ç„¡åŠ¹ã‚¹ãƒ†ãƒ¼ãƒˆ
 
 	m_DeviceContext->OMSetDepthStencilState( m_DepthStateEnable, NULL );
 
 
 
 
-	// ƒTƒ“ƒvƒ‰[ƒXƒe[ƒgİ’è
+	// ã‚µãƒ³ãƒ—ãƒ©ãƒ¼ã‚¹ãƒ†ãƒ¼ãƒˆè¨­å®š
 	D3D11_SAMPLER_DESC samplerDesc{};
 	samplerDesc.Filter = D3D11_FILTER_ANISOTROPIC;
 	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -193,7 +193,7 @@ void Renderer::Init()
 
 
 
-	// ’è”ƒoƒbƒtƒ@¶¬
+	// å®šæ•°ãƒãƒƒãƒ•ã‚¡ç”Ÿæˆ
 	D3D11_BUFFER_DESC bufferDesc{};
 	bufferDesc.ByteWidth = sizeof(XMFLOAT4X4);
 	bufferDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -229,7 +229,7 @@ void Renderer::Init()
 
 
 
-	// ƒ‰ƒCƒg‰Šú‰»
+	// ãƒ©ã‚¤ãƒˆåˆæœŸåŒ–
 	LIGHT light{};
 	light.Enable = true;
 	light.Direction = XMFLOAT4(0.0f, -1.0f, 0.0f, 0.0f);
@@ -239,7 +239,7 @@ void Renderer::Init()
 
 
 
-	// ƒ}ƒeƒŠƒAƒ‹‰Šú‰»
+	// ãƒãƒ†ãƒªã‚¢ãƒ«åˆæœŸåŒ–
 	MATERIAL material{};
 	material.Diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	material.Ambient = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -250,7 +250,7 @@ void Renderer::Init()
 
 }
 
-//DirectX‚ÌI—¹ˆ—‚ª“ü‚Á‚Ä‚é
+//DirectXã®çµ‚äº†å‡¦ç†ãŒå…¥ã£ã¦ã‚‹
 void Renderer::Uninit()
 {
 
@@ -269,7 +269,7 @@ void Renderer::Uninit()
 
 }
 
-// •`‰æŠJnˆ—‚ª“ü‚Á‚Ä‚é
+// æç”»é–‹å§‹å‡¦ç†ãŒå…¥ã£ã¦ã‚‹
 void Renderer::Begin()
 {
 	ResetDrawCount();
@@ -279,13 +279,13 @@ void Renderer::Begin()
 	m_DeviceContext->ClearDepthStencilView( m_DepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 }
 
-// •`‰æI—¹ˆ—‚ª“ü‚Á‚Ä‚é
+// æç”»çµ‚äº†å‡¦ç†ãŒå…¥ã£ã¦ã‚‹
 void Renderer::End()
 {
 	m_SwapChain->Present( 1, 0 );
 }
 
-// [“xƒoƒbƒtƒ@‚Ì—LŒøE–³Œø‚ğØ‚è‘Ö‚¦‚é
+// æ·±åº¦ãƒãƒƒãƒ•ã‚¡ã®æœ‰åŠ¹ãƒ»ç„¡åŠ¹ã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
 void Renderer::SetDepthEnable( bool Enable )
 {
 	if( Enable )
@@ -295,7 +295,7 @@ void Renderer::SetDepthEnable( bool Enable )
 
 }
 
-// ƒAƒ‹ƒtƒ@ƒeƒXƒg‚Ì—LŒøE–³Œø‚ğØ‚è‘Ö‚¦‚é
+// ã‚¢ãƒ«ãƒ•ã‚¡ãƒ†ã‚¹ãƒˆã®æœ‰åŠ¹ãƒ»ç„¡åŠ¹ã‚’åˆ‡ã‚Šæ›¿ãˆã‚‹
 void Renderer::SetATCEnable( bool Enable )
 {
 	float blendFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -307,7 +307,7 @@ void Renderer::SetATCEnable( bool Enable )
 
 }
 
-// 2D•`‰æ—p‚Ìƒ[ƒ‹ƒhEƒrƒ…[EƒvƒƒWƒFƒNƒVƒ‡ƒ“s—ñ‚ğİ’è‚·‚é
+// 2Dæç”»ç”¨ã®ãƒ¯ãƒ¼ãƒ«ãƒ‰ãƒ»ãƒ“ãƒ¥ãƒ¼ãƒ»ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ã‚·ãƒ§ãƒ³è¡Œåˆ—ã‚’è¨­å®šã™ã‚‹
 void Renderer::SetWorldViewProjection2D()
 {
 	SetWorldMatrix(XMMatrixIdentity());
@@ -318,7 +318,7 @@ void Renderer::SetWorldViewProjection2D()
 	SetProjectionMatrix(projection);
 }
 
-// ƒ[ƒ‹ƒhs—ñ‚ğİ’è‚·‚é
+// ãƒ¯ãƒ¼ãƒ«ãƒ‰è¡Œåˆ—ã‚’è¨­å®šã™ã‚‹
 void Renderer::SetWorldMatrix(XMMATRIX WorldMatrix)
 {
 	XMFLOAT4X4 worldf;
@@ -326,7 +326,7 @@ void Renderer::SetWorldMatrix(XMMATRIX WorldMatrix)
 	m_DeviceContext->UpdateSubresource(m_WorldBuffer, 0, NULL, &worldf, 0, 0);
 }
 
-// ƒrƒ…[s—ñ‚ğİ’è‚·‚é
+// ãƒ“ãƒ¥ãƒ¼è¡Œåˆ—ã‚’è¨­å®šã™ã‚‹
 void Renderer::SetViewMatrix(XMMATRIX ViewMatrix)
 {
 	XMFLOAT4X4 viewf;
@@ -334,7 +334,7 @@ void Renderer::SetViewMatrix(XMMATRIX ViewMatrix)
 	m_DeviceContext->UpdateSubresource(m_ViewBuffer, 0, NULL, &viewf, 0, 0);
 }
 
-// ƒvƒƒWƒFƒNƒVƒ‡ƒ“s—ñ‚ğİ’è‚·‚é
+// ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ã‚·ãƒ§ãƒ³è¡Œåˆ—ã‚’è¨­å®šã™ã‚‹
 void Renderer::SetProjectionMatrix(XMMATRIX ProjectionMatrix)
 {
 	XMFLOAT4X4 projectionf;
@@ -343,19 +343,19 @@ void Renderer::SetProjectionMatrix(XMMATRIX ProjectionMatrix)
 
 }
 
-// ƒ}ƒeƒŠƒAƒ‹‚ğİ’è‚·‚é
+// ãƒãƒ†ãƒªã‚¢ãƒ«ã‚’è¨­å®šã™ã‚‹
 void Renderer::SetMaterial( MATERIAL Material )
 {
 	m_DeviceContext->UpdateSubresource( m_MaterialBuffer, 0, NULL, &Material, 0, 0 );
 }
 
-// ƒ‰ƒCƒg‚ğİ’è‚·‚é
+// ãƒ©ã‚¤ãƒˆã‚’è¨­å®šã™ã‚‹
 void Renderer::SetLight( LIGHT Light )
 {
 	m_DeviceContext->UpdateSubresource(m_LightBuffer, 0, NULL, &Light, 0, 0);
 }
 
-// ’¸“_ƒVƒF[ƒ_[‚Ìì¬
+// é ‚ç‚¹ã‚·ã‚§ãƒ¼ãƒ€ãƒ¼ã®ä½œæˆ
 void Renderer::CreateVertexShader( ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName )
 {
 
@@ -380,12 +380,12 @@ void Renderer::CreateVertexShader( ID3D11VertexShader** VertexShader, ID3D11Inpu
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 
-		//ƒ{[ƒ“ƒCƒ“ƒfƒbƒNƒX
+		//ãƒœãƒ¼ãƒ³ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹
 		{ "BONEINDEX", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		//ƒ{[ƒ“ƒEƒFƒCƒg
+		//ãƒœãƒ¼ãƒ³ã‚¦ã‚§ã‚¤ãƒˆ
 		{ "BONEWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		
-		//ƒCƒ“ƒXƒ^ƒ“ƒXs—ñ
+		//ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹è¡Œåˆ—
 		{ "INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 		{ "INSTANCE", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 		{ "INSTANCE", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
@@ -404,7 +404,48 @@ void Renderer::CreateVertexShader( ID3D11VertexShader** VertexShader, ID3D11Inpu
 	delete[] buffer;
 }
 
-// ƒsƒNƒZƒ‹ƒVƒF[ƒ_[‚Ìì¬
+void Renderer::CreateVSSkinningVertexShader(ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName)
+{
+	FILE* file = fopen(FileName, "rb");
+	assert(file);
+	long int fsize = _filelength(_fileno(file));
+	unsigned char* buffer = new unsigned char[fsize];
+	fread(buffer, fsize, 1, file);
+	fclose(file);
+
+	HRESULT hr = m_Device->CreateVertexShader(buffer, fsize, NULL, VertexShader);
+	assert(SUCCEEDED(hr));
+
+	// VERTEX_3Dï¼ˆBoneIndex/Weightä»˜ãï¼‰ + InstanceDataï¼ˆFrameä»˜ãï¼‰ã«å¯¾å¿œã—ãŸãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆ
+	D3D11_INPUT_ELEMENT_DESC layout[] =
+	{
+		// é ‚ç‚¹ãƒ‡ãƒ¼ã‚¿ï¼ˆã‚¹ãƒ­ãƒƒãƒˆ0ï¼‰
+		{ "POSITION",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA,   0 },
+		{ "NORMAL",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA,   0 },
+		{ "TEXCOORD",   0, DXGI_FORMAT_R32G32_FLOAT,       0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA,   0 },
+		{ "COLOR",      0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA,   0 },
+		{ "BONEINDEX",  0, DXGI_FORMAT_R32G32B32A32_UINT,  0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA,   0 },
+		{ "BONEWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA,   0 },
+
+		// ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ãƒ‡ãƒ¼ã‚¿ï¼ˆã‚¹ãƒ­ãƒƒãƒˆ1ï¼‰
+		// ãƒ¯ãƒ¼ãƒ«ãƒ‰è¡Œåˆ—ï¼ˆoffset 0ã€œ63ï¼‰
+		{ "INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1,  0, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+		{ "INSTANCE", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+		{ "INSTANCE", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+		{ "INSTANCE", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+
+		// â˜… AnimationIndex(4B) + Frame(4B) + Padding(8B)ï¼ˆoffset 64ã€œ79ï¼‰
+		{ "INSTANCE", 4, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 64, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+	};
+
+	UINT numElements = ARRAYSIZE(layout);
+	hr = m_Device->CreateInputLayout(layout, numElements, buffer, fsize, VertexLayout);
+	assert(SUCCEEDED(hr));
+
+	delete[] buffer;
+}
+
+// ãƒ”ã‚¯ã‚»ãƒ«ã‚·ã‚§ãƒ¼ãƒ€ãƒ¼ã®ä½œæˆ
 void Renderer::CreatePixelShader( ID3D11PixelShader** PixelShader, const char* FileName )
 {
 	FILE* file;
@@ -423,10 +464,10 @@ void Renderer::CreatePixelShader( ID3D11PixelShader** PixelShader, const char* F
 	delete[] buffer;
 }
 
-// ƒXƒLƒjƒ“ƒO’¸“_ƒVƒF[ƒ_[‚Ìì¬
+// ã‚¹ã‚­ãƒ‹ãƒ³ã‚°é ‚ç‚¹ã‚·ã‚§ãƒ¼ãƒ€ãƒ¼ã®ä½œæˆ
 void Renderer::CreateCSSkinningVertexShader(ID3D11VertexShader** VertexShader, ID3D11InputLayout** VertexLayout, const char* FileName)
 {
-	// ƒVƒF[ƒ_[ƒtƒ@ƒCƒ‹“Ç‚İ‚İ
+	// ã‚·ã‚§ãƒ¼ãƒ€ãƒ¼ãƒ•ã‚¡ã‚¤ãƒ«èª­ã¿è¾¼ã¿
 	FILE* file;
 	long int fsize;
 
@@ -438,20 +479,20 @@ void Renderer::CreateCSSkinningVertexShader(ID3D11VertexShader** VertexShader, I
 	fread(buffer, fsize, 1, file);
 	fclose(file);
 
-	// ’¸“_ƒVƒF[ƒ_[ì¬
+	// é ‚ç‚¹ã‚·ã‚§ãƒ¼ãƒ€ãƒ¼ä½œæˆ
 	HRESULT hr = m_Device->CreateVertexShader(buffer, fsize, NULL, VertexShader);
 	assert(SUCCEEDED(hr));
 
-	// ƒXƒLƒjƒ“ƒOŒã‚Ì’¸“_\‘¢‘Ì‚É‘Î‰‚·‚éƒŒƒCƒAƒEƒg
+	// ã‚¹ã‚­ãƒ‹ãƒ³ã‚°å¾Œã®é ‚ç‚¹æ§‹é€ ä½“ã«å¯¾å¿œã™ã‚‹ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆ
 	D3D11_INPUT_ELEMENT_DESC layout[] =
 	{
-		// ƒXƒLƒ“Ï‚İ’¸“_
+		// ã‚¹ã‚­ãƒ³æ¸ˆã¿é ‚ç‚¹
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 
-		// ƒCƒ“ƒXƒ^ƒ“ƒXs—ñiƒXƒƒbƒg1j
+		// ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹è¡Œåˆ—ï¼ˆã‚¹ãƒ­ãƒƒãƒˆ1ï¼‰
 		{ "INSTANCE", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 		{ "INSTANCE", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
 		{ "INSTANCE", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
@@ -466,10 +507,10 @@ void Renderer::CreateCSSkinningVertexShader(ID3D11VertexShader** VertexShader, I
 	delete[] buffer;
 }
 
-// ƒeƒNƒXƒ`ƒƒ‚Ìì¬
+// ãƒ†ã‚¯ã‚¹ãƒãƒ£ã®ä½œæˆ
 void Renderer::CreateTexture(const char* FileName, ID3D11ShaderResourceView** TextureView)
 {
-	// Šù‘¶‚Ì Texture ƒNƒ‰ƒX‚Ì Load ŠÖ”‚ğg‚¢AŒ‹‰Ê‚ğ TextureView ‚ÉŠi”[‚µ‚Ü‚·
+	// æ—¢å­˜ã® Texture ã‚¯ãƒ©ã‚¹ã® Load é–¢æ•°ã‚’ä½¿ã„ã€çµæœã‚’ TextureView ã«æ ¼ç´ã—ã¾ã™
 	*TextureView = Texture::Load(FileName);
 }
 
