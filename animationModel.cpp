@@ -205,15 +205,6 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players)
 			inst.Duration = 1.0f;
 		}
 
-		// ★ ここにデバッグ出力を追加
-		char buf[256];
-		sprintf_s(buf, "[VS] anim=%s  raw_frame=%d  duration=%.0f  clamped=%d\n",
-			animName,
-			player->GetFrame(),
-			inst.Duration,
-			inst.Duration > 0 ? player->GetFrame() % (int)inst.Duration : 0);
-		OutputDebugStringA(buf);
-
 
 		//プレイヤーのアニメーション状態に応じて振り分け　（同じアニメーションをまとめて描画するため）
 		if (player->IsRunning())
@@ -462,6 +453,7 @@ void AnimationModel::DrawVS()
 	ID3D11ShaderResourceView* nullSRV = nullptr;
 	Renderer::GetDeviceContext()->VSSetShaderResources(1, 1, &nullSRV);
 }
+
 // 解放
 void AnimationModel::Uninit()
 {
