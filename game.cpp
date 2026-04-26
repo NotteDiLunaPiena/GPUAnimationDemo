@@ -41,7 +41,7 @@ void Game::Init()
 
 
     //プレイヤーを生成して共有モデルを渡す
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < MAX_INSTANCE_COUNT; i++) {
         auto p = AddGameObject<Player>(1);
 		p->SetID(i);
         p->SetPosition({ (float)(i % 50) * 2.0f, 0.0f, (float)(i / 50) * 2.0f });
@@ -64,6 +64,8 @@ void Game::Update()
 
     auto players = GetGameObjects<Player>();
     if (players.empty() || !m_SharedModel) return;
+
+    static int s_ActiveCount = MAX_INSTANCE_COUNT;
 
 	// ImGuiによるデバッグUIの表示・   操作
     static bool isDebugMode = false; // デバッグモードのON/OFF
@@ -102,6 +104,10 @@ void Game::Update()
     ImGui::Text("Draw Calls     : %d", Renderer::GetDrawCallCount());
     //モデル読み込み対数
     ImGui::Text("Model Count    : %d", m_SharedModel ? 1 : 0);
+
+    ImGui::Separator();
+    ImGui::SliderInt("Active Instances", &s_ActiveCount, 1, MAX_INSTANCE_COUNT);
+    ImGui::Text("Active: %d / %d", s_ActiveCount, MAX_INSTANCE_COUNT);
 
     if (m_SharedModel) {
         ImGui::Text("Compute Dispatches this frame: %d", m_SharedModel->GetComputeDispatchCount());
@@ -142,8 +148,14 @@ void Game::Update()
     m_SharedModel->Update("Idle", (int)currentFrame, "Idle", (int)currentFrame, 0.0f);
     m_SharedModel->Update("Run", (int)currentFrame, "Run", (int)currentFrame, 0.0f);
 
-    //描画データの更新
-    m_SharedModel->UpdateInstanceData(players);
+    int activeCount = std::min(s_ActiveCount, (int)players.size());
+
+    // 末尾（奥）ではなく、先頭（手前）を残すため末尾から削る
+    std::vector<Player*> activePlayers(
+        players.end() - activeCount,  
+        players.end()
+    );
+    m_SharedModel->UpdateInstanceData(activePlayers);
 }
 
 void Game::Draw()
