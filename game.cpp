@@ -65,6 +65,7 @@ void Game::Update()
     if (players.empty() || !m_SharedModel) return;
 
     static int s_ActiveCount = MAX_INSTANCE_COUNT;
+    static bool s_EnableCulling = true;
 
 	// ImGuiによるデバッグUIの表示・   操作
     static bool isDebugMode = false; // デバッグモードのON/OFF
@@ -86,6 +87,10 @@ void Game::Update()
     ImGui::Separator();
     ImGui::SliderInt("Active Instances", &s_ActiveCount, 1, MAX_INSTANCE_COUNT);
     ImGui::Text("Active: %d / %d", s_ActiveCount, MAX_INSTANCE_COUNT);
+
+    ImGui::Separator();
+    ImGui::Checkbox("Frustum Culling", &s_EnableCulling);
+    ImGui::Text("Culling: %s", s_EnableCulling ? "ON" : "OFF");
 
     if (m_SharedModel) {
         ImGui::Text("Compute Dispatches this frame: %d", m_SharedModel->GetComputeDispatchCount());
@@ -134,14 +139,19 @@ void Game::Update()
         players.end()
     );
 
+    //修正：カリングON/OFFで呼び出しを切り替え
     Camera* camera = GetGameObject<Camera>();
-    if (camera)
+    if (s_EnableCulling && camera)
     {
         m_SharedModel->UpdateInstanceData(
             activePlayers,
             camera->GetViewMatrix(),
             camera->GetProjectionMatrix()
         );
+    }
+    else
+    {
+        m_SharedModel->UpdateInstanceData(activePlayers);
     }
 }
 
