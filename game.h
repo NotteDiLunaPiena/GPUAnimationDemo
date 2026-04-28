@@ -7,7 +7,6 @@ class Game : public Scene
 private:
 	class Audio* m_BGM;
 	class AnimationModel* m_SharedModel; // 共有アニメーションモデル
-	class AnimationPlayer* m_APlayer;
 
 	bool m_SpacePrev = false; // 前フレームのスペースキー状態
 

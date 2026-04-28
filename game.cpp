@@ -24,7 +24,6 @@ void Game::Init()
     m_SharedModel->LoadAnimation("asset\\model\\Akai_Run.fbx", "Run");
     m_SharedModel->LoadAnimation("asset\\model\\Akai_Idle.fbx", "Idle");
 
-    m_APlayer = new AnimationPlayer();
 
     // 出力ディレクトリがなければ作る（Winsdk が含まれている前提）
     CreateDirectoryA("baked", NULL);
@@ -71,27 +70,6 @@ void Game::Update()
     static bool isDebugMode = false; // デバッグモードのON/OFF
     static int debugFrame = 0;       // スライダーで操作するフレーム番号
 
-    ImGui::Begin("Animation Debugger");
-
-    // デバッグモードのスイッチ
-    ImGui::Checkbox("Debug Mode (Force Run)", &isDebugMode);
-
-    if (isDebugMode)
-    {
-        // Runアニメーションの長さを取得してスライダーを作る
-        int maxRun = m_APlayer->GetAnimationDuration("Run");
-        ImGui::SliderInt("Run Frame Bar", &debugFrame, 0, maxRun - 1);
-
-        // 全プレイヤーを「走っているポーズ」かつ「スライダーのフレーム」に強制書き換え
-        for (auto& p : players)
-        {
-            p->SetRunning(true);    // 強制的にRunポーズにする
-            p->SetFrame(debugFrame); // 強制的にスライダーのフレームにする
-        }
-    }
-
-    ImGui::End();
-
 	// レンダリング統計情報の表示
     ImGui::Begin("GPU Skinning Demo");
     //FPS
@@ -114,7 +92,7 @@ void Game::Update()
         ImGui::Text("Idle: %s", m_SharedModel->WasAnimationBakedThisFrame("Idle") ? "BAKED" : "COMPUTE");
         ImGui::Text("Run : %s", m_SharedModel->WasAnimationBakedThisFrame("Run") ? "BAKED" : "COMPUTE");
     
-        // ★ スキニング方式の切り替えUI
+        //スキニング方式の切り替えUI
         ImGui::Separator();
         ImGui::Text("Skinning Mode:");
 
@@ -155,7 +133,16 @@ void Game::Update()
         players.end() - activeCount,  
         players.end()
     );
-    m_SharedModel->UpdateInstanceData(activePlayers);
+
+    Camera* camera = GetGameObject<Camera>();
+    if (camera)
+    {
+        m_SharedModel->UpdateInstanceData(
+            activePlayers,
+            camera->GetViewMatrix(),
+            camera->GetProjectionMatrix()
+        );
+    }
 }
 
 void Game::Draw()

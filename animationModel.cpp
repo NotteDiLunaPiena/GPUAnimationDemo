@@ -170,20 +170,64 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 }
 
 // インスタンスデータ更新
-void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players)
+void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, const XMMATRIX& view, const XMMATRIX& proj)
 {
 	//インスタンス配列の初期化
 	m_InstanceDataIdle.clear();
 	m_InstanceDataRun.clear();
+	// ビュープロジェクション行列から視錐台の6平面を抽出
+	XMMATRIX vp = XMMatrixMultiply(view, proj);
+
+	XMFLOAT4X4 m;
+	XMStoreFloat4x4(&m, XMMatrixTranspose(vp));
+
+	// 各平面を計算（left, right, top, bottom, near, far）
+	XMFLOAT4 planes[6];
+	// Left
+	planes[0] = { m._41 + m._11, m._42 + m._12, m._43 + m._13, m._44 + m._14 };
+	// Right
+	planes[1] = { m._41 - m._11, m._42 - m._12, m._43 - m._13, m._44 - m._14 };
+	// Bottom
+	planes[2] = { m._41 + m._21, m._42 + m._22, m._43 + m._23, m._44 + m._24 };
+	// Top
+	planes[3] = { m._41 - m._21, m._42 - m._22, m._43 - m._23, m._44 - m._24 };
+	// Near
+	planes[4] = { m._41 + m._31, m._42 + m._32, m._43 + m._33, m._44 + m._34 };
+	// Far
+	planes[5] = { m._41 - m._31, m._42 - m._32, m._43 - m._33, m._44 - m._34 };
+
+	// 各平面を正規化
+	for (auto& p : planes)
+	{
+		float len = sqrtf(p.x * p.x + p.y * p.y + p.z * p.z);
+		p.x /= len; p.y /= len; p.z /= len; p.w /= len;
+	}
+
 
 	//全プレイヤー分のインスタンスデータの作成
 	for (auto* player : players)
 	{
-		InstanceData inst{};
-
 		Vector3 pos = player->GetPosition();
 		Vector3 rot = player->GetRotation();
 		Vector3 scale = player->GetScale();
+
+		// 視錐台の外側にいるか判定（半径1.0fの球として判定）
+		const float radius = 1.0f;
+		bool culled = false;
+		for (auto& plane : planes)
+		{
+			float dist = plane.x * pos.x + plane.y * pos.y
+				+ plane.z * pos.z + plane.w;
+			if (dist < -radius)
+			{
+				culled = true;
+				break;
+			}
+		}
+		if (culled) continue; // 視錐台外はスキップ
+
+		InstanceData inst{};
+
 
 		//ワールド行列の作成
 		XMMATRIX world =

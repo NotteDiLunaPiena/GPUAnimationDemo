@@ -123,8 +123,7 @@ public:
 
     void Update(const char* AnimationName1, int Frame1,
         const char* AnimationName2, int Frame2, float BlendRate);
-    void UpdateInstanceData(const std::vector<Player*>& players);
-
+    void UpdateInstanceData(const std::vector<Player*>& players, const XMMATRIX& view, const XMMATRIX& proj);
     void Draw() override;
     void Uninit() override;
 
