@@ -292,6 +292,7 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, con
 	updateBuffer(m_InstanceBufferRun, m_InstanceDataRun);
 }
 
+// インスタンスデータ更新（視錐台カリングなし）
 void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players)
 {
 	//インスタンス配列の初期化
@@ -369,7 +370,6 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players)
 	updateBuffer(m_InstanceBufferIdle, m_InstanceDataIdle);
 	updateBuffer(m_InstanceBufferRun, m_InstanceDataRun);
 }
-
 
 // 描画
 void AnimationModel::Draw() {
@@ -800,6 +800,7 @@ VERTEX_3D* AnimationModel::GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIn
 	return vertices;
 }
 
+// VS用のボーン行列バッファを作成
 void AnimationModel::BuildVSBoneMatrixBuffer(const char* AnimName)
 {
 	const aiScene* animScene = m_Resource->GetAnimationScene(AnimName);
@@ -1074,6 +1075,7 @@ bool AnimationModel::LoadBakedAnimation(const char* FilePath, const char* AnimNa
 	return true;
 }
 
+//ベイクしたアニメーションの解放
 void AnimationModel::ReleaseBakedAnimations()
 {
 	for (auto& pair : m_BakedBuffers)
@@ -1087,17 +1089,20 @@ void AnimationModel::ReleaseBakedAnimations()
 	m_LastBakedFrame.clear();
 }
 
+//今フレームで何回コンピュートシェーダを呼んだか、どのアニメーションをベイク版で描画したか
 void AnimationModel::ResetDebugCounters()
 {
 	m_ComputeDispatchCount = 0;
 	m_AnimationUsedBaked.clear();
 }
 
+// コンピュートシェーダ呼び出し回数をインクリメント
 int AnimationModel::GetComputeDispatchCount() const
 {
 	return m_ComputeDispatchCount;
 }
 
+// アニメーション名を指定して、そのアニメーションでベイク版を使用したかどうかを取得
 bool AnimationModel::WasAnimationBakedThisFrame(const char* AnimName) const
 {
 	if (!AnimName) return false;
