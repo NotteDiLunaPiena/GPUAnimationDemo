@@ -121,9 +121,11 @@ public:
     void Load(const char* FileName);
     void LoadAnimation(const char* FileName, const char* Name);
 
-    void Update(const char* AnimationName1, int Frame1,
-        const char* AnimationName2, int Frame2, float BlendRate);
+    void Update(const char* AnimationName1, int Frame1,const char* AnimationName2, int Frame2, float BlendRate);
+    
     void UpdateInstanceData(const std::vector<Player*>& players, const XMMATRIX& view, const XMMATRIX& proj);
+    void UpdateInstanceData(const std::vector<Player*>& players);
+    
     void Draw() override;
     void Uninit() override;
 

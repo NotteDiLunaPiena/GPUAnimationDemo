@@ -292,6 +292,85 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, con
 	updateBuffer(m_InstanceBufferRun, m_InstanceDataRun);
 }
 
+void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players)
+{
+	//インスタンス配列の初期化
+	m_InstanceDataIdle.clear();
+	m_InstanceDataRun.clear();
+
+	//全プレイヤー分のインスタンスデータの作成
+	for (auto* player : players)
+	{
+		InstanceData inst{};
+
+		Vector3 pos = player->GetPosition();
+		Vector3 rot = player->GetRotation();
+		Vector3 scale = player->GetScale();
+
+		//ワールド行列の作成
+		XMMATRIX world =
+			XMMatrixScaling(scale.x, scale.y, scale.z) *
+			XMMatrixRotationRollPitchYaw(rot.x, rot.y, rot.z) *
+			XMMatrixTranslation(pos.x, pos.y, pos.z);
+
+		//GPU用のインスタンスデータに格納
+		XMStoreFloat4x4(&inst.World, world);
+		inst.Frame = (float)player->GetFrame();
+
+		// Idle / Run の duration を取得してセット
+		const char* animName = player->IsRunning() ? "Run" : "Idle";
+		const aiScene* animScene = m_Resource->GetAnimationScene(animName);
+		if (animScene && animScene->HasAnimations()) {
+			inst.Duration = (float)(int)animScene->mAnimations[0]->mDuration;
+		}
+		else {
+			inst.Duration = 1.0f;
+		}
+
+
+		//プレイヤーのアニメーション状態に応じて振り分け　（同じアニメーションをまとめて描画するため）
+		if (player->IsRunning())
+		{
+			inst.AnimationIndex = 1;
+			m_InstanceDataRun.push_back(inst);
+		}
+		else
+		{
+			inst.AnimationIndex = 0;
+			m_InstanceDataIdle.push_back(inst);
+		}
+
+	}
+
+	//インスタンスバッファの作成・更新
+	auto updateBuffer = [](ID3D11Buffer*& buffer, const std::vector<InstanceData>& data)
+		{
+			if (data.empty()) return;
+
+			//バッファが未作成なら作成
+			if (!buffer)
+			{
+				D3D11_BUFFER_DESC desc = {};
+				desc.Usage = D3D11_USAGE_DYNAMIC;	//毎フレーム更新
+				desc.ByteWidth = sizeof(InstanceData) * MAX_INSTANCE_COUNT;
+				desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+				desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;	//GPU書き込み可能
+				Renderer::GetDevice()->CreateBuffer(&desc, nullptr, &buffer);
+			}
+
+			//GPUへのデータ転送
+			D3D11_MAPPED_SUBRESOURCE mapped = {};
+			Renderer::GetDeviceContext()->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+			memcpy(mapped.pData, data.data(), sizeof(InstanceData) * data.size());
+			Renderer::GetDeviceContext()->Unmap(buffer, 0);
+		};
+
+	//アニメーションごとにインスタンスバッファ更新
+	updateBuffer(m_InstanceBufferIdle, m_InstanceDataIdle);
+	updateBuffer(m_InstanceBufferRun, m_InstanceDataRun);
+}
+
+
 // 描画
 void AnimationModel::Draw() {
 	switch (m_SkinningMode) {
