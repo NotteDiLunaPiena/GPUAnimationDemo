@@ -9,11 +9,7 @@
 #include "animationModel.h"
 #include "modelResource.h"
 
-// -------------------------------------------------------
 //  初期化
-//  ModelResource からボーン構造をコピーしてインスタンス固有の
-//  ボーンマップを作成する
-// -------------------------------------------------------
 void AnimationPlayer::Init(const aiScene* modelScene, ModelResource* resource)
 {
     assert(modelScene && resource);
@@ -46,9 +42,7 @@ void AnimationPlayer::Init(const aiScene* modelScene, ModelResource* resource)
     buildBone(m_ModelScene->mRootNode);
 }
 
-// -------------------------------------------------------
 //  解放
-// -------------------------------------------------------
 void AnimationPlayer::Uninit()
 {
     m_Bone.clear();
@@ -57,16 +51,7 @@ void AnimationPlayer::Uninit()
     m_Resource = nullptr;
 }
 
-// -------------------------------------------------------
-//  アニメーション更新（メイン）
-//
-//  処理フロー:
-//   1. 全ボーンの AnimationMatrix をノードのデフォルトに初期化
-//   2. Anim1 / Anim2 のチャンネルからフレームの pos / rot を取得
-//   3. LERP(pos) / SLERP(rot) でブレンド
-//   4. bone->AnimationMatrix にセット
-//   5. UpdateBoneMatrix で最終スキニング行列(bone->Matrix)を計算
-// -------------------------------------------------------
+//更新
 void AnimationPlayer::Update(const char* Anim1, int Frame1,const char* Anim2, int Frame2,float BlendRate)
 {
     if (!Anim1 || !Anim2) return;
@@ -81,10 +66,10 @@ void AnimationPlayer::Update(const char* Anim1, int Frame1,const char* Anim2, in
     aiAnimation* animation1 = scene1->mAnimations[0];
     aiAnimation* animation2 = scene2->mAnimations[0];
 
-    // 1. ローカル行列初期化（デフォルトポーズに戻す）
+    //　ローカル行列初期化
     UpdateLocalAnimationMatrix(m_ModelScene->mRootNode);
 
-    // 2〜4. ボーンごとにブレンド計算
+    // ボーンごとにブレンド計算
     for (auto& pair : m_Bone)
     {
         BONE& bone = pair.second;
@@ -135,14 +120,12 @@ void AnimationPlayer::Update(const char* Anim1, int Frame1,const char* Anim2, in
         bone.AnimationMatrix = aiMatrix4x4(aiVector3D(1, 1, 1), blendRot, blendPos);
     }
 
-    // 5. グローバル行列 → スキニング行列を再帰計算
+    // グローバル行列 → スキニング行列を再帰計算
     aiMatrix4x4 identity;
     UpdateBoneMatrix(m_ModelScene->mRootNode, identity);
 }
 
-// -------------------------------------------------------
 //  フレームを 1 進める（ループ）
-// -------------------------------------------------------
 void AnimationPlayer::AdvanceFrame(const char* AnimationName, int& CurrentFrame) const
 {
     int duration = GetAnimationDuration(AnimationName);
@@ -150,9 +133,7 @@ void AnimationPlayer::AdvanceFrame(const char* AnimationName, int& CurrentFrame)
     CurrentFrame = (CurrentFrame + 1) % duration;
 }
 
-// -------------------------------------------------------
 //  最終フレーム判定
-// -------------------------------------------------------
 bool AnimationPlayer::IsAnimationEnd(const char* AnimationName, int CurrentFrame) const
 {
     int duration = GetAnimationDuration(AnimationName);
@@ -160,9 +141,7 @@ bool AnimationPlayer::IsAnimationEnd(const char* AnimationName, int CurrentFrame
     return (CurrentFrame >= duration - 1);
 }
 
-// -------------------------------------------------------
 //  アニメーションの総フレーム数
-// -------------------------------------------------------
 int AnimationPlayer::GetAnimationDuration(const char* AnimationName) const
 {
     const aiScene* scene = m_Resource->GetAnimationScene(AnimationName);
@@ -170,9 +149,7 @@ int AnimationPlayer::GetAnimationDuration(const char* AnimationName) const
     return (int)scene->mAnimations[0]->mDuration;
 }
 
-// -------------------------------------------------------
 //  現在フレームの進行率（0.0〜1.0）
-// -------------------------------------------------------
 float AnimationPlayer::GetAnimationCurrentFramePercentage(const char* AnimationName, int CurrentFrame) const
 {
     int duration = GetAnimationDuration(AnimationName);
@@ -180,10 +157,7 @@ float AnimationPlayer::GetAnimationCurrentFramePercentage(const char* AnimationN
     return (float)(CurrentFrame % duration) / (float)duration;
 }
 
-// -------------------------------------------------------
-//  ローカルアニメーション行列初期化（内部）
-//  アニメーション適用前に、ノードのデフォルト変換で上書きする
-// -------------------------------------------------------
+//  ローカルアニメーション行列初期化
 void AnimationPlayer::UpdateLocalAnimationMatrix(aiNode* node)
 {
     const std::string name = node->mName.C_Str();
@@ -194,10 +168,7 @@ void AnimationPlayer::UpdateLocalAnimationMatrix(aiNode* node)
         UpdateLocalAnimationMatrix(node->mChildren[i]);
 }
 
-// -------------------------------------------------------
 //  グローバルボーン行列の再帰計算（内部）
-//   bone->Matrix = (ParentMatrix × AnimationMatrix) × OffsetMatrix
-// -------------------------------------------------------
 void AnimationPlayer::UpdateBoneMatrix(aiNode* node, const aiMatrix4x4& parentMatrix)
 {
     const std::string name = node->mName.C_Str();

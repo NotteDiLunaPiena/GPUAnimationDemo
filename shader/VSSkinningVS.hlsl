@@ -8,19 +8,12 @@ StructuredBuffer<float4x4> g_AllBoneMatrices : register(t1);
 
 void main(in VS_IN In, out PS_IN Out)
 {
-    // -------------------------------------------------------
-    // 1. インスタンスごとのフレームを取得
-    //    InstanceExtra.y に Frame が入っている
-    // -------------------------------------------------------
+    //インスタンスごとのフレー無取得
     int frame = (int) In.InstanceExtra.y;
     int duration = (int) In.InstanceExtra.z; // ← duration を渡す
     if (duration > 0)frame = frame % duration;
     
-    // -------------------------------------------------------
-    // 2. StructuredBuffer からそのフレームのボーン行列を合成
-    //    インスタンスごとに異なる frame を参照するため
-    //    全インスタンスが独立したポーズになる
-    // -------------------------------------------------------
+    //ボーンの重みとインデックスから、スキニング用の変換行列を計算
     float4x4 boneTransform = 0;
     for (int i = 0; i < 4; i++)
     {
@@ -28,15 +21,10 @@ void main(in VS_IN In, out PS_IN Out)
         boneTransform += g_AllBoneMatrices[matIndex] * In.BoneWeight[i];
     }
 
-    // -------------------------------------------------------
-    // 3. スキニング（ボーン変換）
-    // -------------------------------------------------------
     float4 skinnedPos    = mul(float4(In.Position.xyz, 1.0f), boneTransform);
     float3 skinnedNormal = normalize(mul(float4(In.Normal.xyz, 0.0f), boneTransform).xyz);
 
-    // -------------------------------------------------------
-    // 4. インスタンスのワールド行列を組み立て
-    // -------------------------------------------------------
+    // インスタンスごとのワールド行列を構築
     matrix instanceWorld =
     {
         In.InstanceWorldRow0,
@@ -45,9 +33,7 @@ void main(in VS_IN In, out PS_IN Out)
         In.InstanceWorldRow3
     };
 
-    // -------------------------------------------------------
-    // 5. ワールド → ビュー → プロジェクション変換
-    // -------------------------------------------------------
+
     float4 worldPos = mul(skinnedPos, instanceWorld);
     Out.Position    = mul(worldPos, mul(View, Projection));
 

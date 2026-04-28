@@ -97,13 +97,11 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 	}
 	else
 	{
-		// ★ VS モード：StructuredBuffer は静的なので更新不要
-		//    LastBakedFrame にフレームを記録するだけ（デバッグ表示用）
 		if (Anim1) m_LastBakedFrame[Anim1] = Frame1;
 		return;
 	}
 
-	// --- CS モード（ベイクなし）の既存処理 ---
+	// アニメーションシーンの取得と更新
 	if (!Anim1 || !Anim2) return;
 	const aiScene* s1 = m_Resource->GetAnimationScene(Anim1);
 	const aiScene* s2 = m_Resource->GetAnimationScene(Anim2);
@@ -112,6 +110,7 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 
 	m_Player->Update(Anim1, Frame1, Anim2, Frame2, BlendRate);
 
+	// ボーン行列を定数バッファに転送
 	D3D11_MAPPED_SUBRESOURCE ms;
 	Renderer::GetDeviceContext()->Map(m_BoneConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms);
 	struct CB_BONE_MATRIX { XMFLOAT4X4 BoneMatrix[MAX_BONE_COUNT]; };
@@ -130,6 +129,7 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 
 	std::string animName = Anim1 ? Anim1 : "";
 
+	// 各メッシュごとにスキニングCSを実行して頂点変形
 	for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
 	{
 		UINT numVertices = m_AiScene->mMeshes[m]->mNumVertices;
@@ -433,7 +433,7 @@ void AnimationModel::DrawVS()
 				mesh->mNumFaces * 3, (UINT)m_InstanceDataIdle.size(), 0, 0, 0);
 		}
 
-		// ★ Run 描画：Run用 StructuredBuffer を t1 にセット
+		//Run 描画：Run用 StructuredBuffer を t1 にセット
 		if (!m_InstanceDataRun.empty() && m_InstanceBufferRun && m_VS_BoneMatrixSRV_Run)
 		{
 			Renderer::GetDeviceContext()->VSSetShaderResources(1, 1, &m_VS_BoneMatrixSRV_Run);

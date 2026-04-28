@@ -83,8 +83,7 @@ private:
     ID3D11VertexShader* m_VS_VertexShader = nullptr;
     ID3D11PixelShader* m_VS_PixelShader = nullptr;
 
-    // ★ VS パス用 StructuredBuffer（全フレーム分のボーン行列）
-    //    m_BoneConstantBuffer_Idle/Run は不要になり削除
+    // パス用 StructuredBuffer（全フレーム分のボーン行列）
     ID3D11Buffer* m_VS_BoneMatrixBuffer_Idle = nullptr;
     ID3D11ShaderResourceView* m_VS_BoneMatrixSRV_Idle = nullptr;
     ID3D11Buffer* m_VS_BoneMatrixBuffer_Run = nullptr;
@@ -102,7 +101,7 @@ private:
     XMMATRIX ConvertAiMatrixToXMMatrix(const aiMatrix4x4& m);
     VERTEX_3D* GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIndex);
 
-    // ★ VSパス用：アニメーション名の全フレームボーン行列をStructuredBufferに焼く
+    //VSパス用：アニメーション名の全フレームボーン行列をStructuredBufferに焼く
     void BuildVSBoneMatrixBuffer(const char* AnimName);
 
     // ベイク関連
