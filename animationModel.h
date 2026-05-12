@@ -44,6 +44,8 @@ class AnimationModel : public Component
 {
 private:
     const aiScene* m_AiScene = nullptr;
+    const aiScene* m_AiSceneLOD1 = nullptr; // 追加
+    const aiScene* m_AiSceneLOD2 = nullptr; // 追加
     int m_IdleCount = 0;
     int m_RunCount = 0;
 
@@ -94,6 +96,24 @@ private:
     ModelResource* m_Resource = nullptr;
     AnimationPlayer* m_Player = nullptr;
 
+    // LOD用リソース
+    ModelResource* m_ResourceLOD1 = nullptr;
+    ModelResource* m_ResourceLOD2 = nullptr;
+    ID3D11Buffer** m_VertexBufferLOD1 = nullptr;
+    ID3D11Buffer** m_IndexBufferLOD1 = nullptr;
+    ID3D11Buffer** m_VertexBufferLOD2 = nullptr;
+    ID3D11Buffer** m_IndexBufferLOD2 = nullptr;
+
+    // LOD別インスタンスデータ
+    std::vector<InstanceData> m_InstanceDataIdle_LOD1;
+    std::vector<InstanceData> m_InstanceDataRun_LOD1;
+    std::vector<InstanceData> m_InstanceDataIdle_LOD2;
+    std::vector<InstanceData> m_InstanceDataRun_LOD2;
+    ID3D11Buffer* m_InstanceBufferIdle_LOD1 = nullptr;
+    ID3D11Buffer* m_InstanceBufferRun_LOD1 = nullptr;
+    ID3D11Buffer* m_InstanceBufferIdle_LOD2 = nullptr;
+    ID3D11Buffer* m_InstanceBufferRun_LOD2 = nullptr;
+
     // 内部処理
     void CreateBone(aiNode* Node);
     void CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex);
@@ -121,6 +141,12 @@ public:
     void Load(const char* FileName);
     void LoadAnimation(const char* FileName, const char* Name);
 
+    // LOD 用のカウント取得（追加）
+    int GetLOD1MeshCount() const;
+    int GetLOD2MeshCount() const;
+    int GetLOD1PolygonCount() const;
+    int GetLOD2PolygonCount() const;
+
     void Update(const char* AnimationName1, int Frame1,const char* AnimationName2, int Frame2, float BlendRate);
     
     void UpdateInstanceData(const std::vector<Player*>& players, const XMMATRIX& view, const XMMATRIX& proj);
@@ -134,6 +160,11 @@ public:
 
     int  GetTotalInstanceCount() const { return (int)(m_InstanceDataIdle.size() + m_InstanceDataRun.size()); }
     int  GetMeshCount() const;
+
+    int GetTotalPolygonCount() const;
+    void LoadLOD(const char* FileNameLOD1, const char* FileNameLOD2);
+    float m_LOD1Distance = 10.0f;
+    float m_LOD2Distance = 20.0f;
 
     void BakeAnimationToDisk(const char* AnimName, const char* OutFilePath);
     bool LoadBakedAnimation(const char* FilePath, const char* AnimName);

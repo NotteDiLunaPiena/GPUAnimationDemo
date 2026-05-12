@@ -175,6 +175,9 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, con
 	//インスタンス配列の初期化
 	m_InstanceDataIdle.clear();
 	m_InstanceDataRun.clear();
+	m_InstanceDataIdle_LOD1.clear(); m_InstanceDataRun_LOD1.clear();
+	m_InstanceDataIdle_LOD2.clear(); m_InstanceDataRun_LOD2.clear();
+
 	// ビュープロジェクション行列から視錐台の6平面を抽出
 	XMMATRIX vp = XMMatrixMultiply(view, proj);
 
@@ -203,6 +206,12 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, con
 		p.x /= len; p.y /= len; p.z /= len; p.w /= len;
 	}
 
+	// view行列からカメラ位置を取得
+	XMMATRIX invView = XMMatrixInverse(nullptr, view);
+	XMFLOAT3 camPos(
+		invView.r[3].m128_f32[0],
+		invView.r[3].m128_f32[1],
+		invView.r[3].m128_f32[2]);
 
 	//全プレイヤー分のインスタンスデータの作成
 	for (auto* player : players)
@@ -225,6 +234,13 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, con
 			}
 		}
 		if (culled) continue; // 視錐台外はスキップ
+		// カメラ距離でLODレベルを決定
+		float dx = pos.x - camPos.x;
+		float dz = pos.z - camPos.z;
+		float dist = sqrtf(dx * dx + dz * dz);
+		int lodLevel = 0;
+		if (dist > m_LOD2Distance) lodLevel = 2;
+		else if (dist > m_LOD1Distance) lodLevel = 1;
 
 		InstanceData inst{};
 
@@ -251,17 +267,18 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, con
 
 
 		//プレイヤーのアニメーション状態に応じて振り分け　（同じアニメーションをまとめて描画するため）
-		if (player->IsRunning())
-		{
+		if (player->IsRunning()) {
 			inst.AnimationIndex = 1;
-			m_InstanceDataRun.push_back(inst);
+			if (lodLevel == 0) m_InstanceDataRun.push_back(inst);
+			else if (lodLevel == 1) m_InstanceDataRun_LOD1.push_back(inst);
+			else                    m_InstanceDataRun_LOD2.push_back(inst);
 		}
-		else
-		{
+		else {
 			inst.AnimationIndex = 0;
-			m_InstanceDataIdle.push_back(inst);
+			if (lodLevel == 0) m_InstanceDataIdle.push_back(inst);
+			else if (lodLevel == 1) m_InstanceDataIdle_LOD1.push_back(inst);
+			else                    m_InstanceDataIdle_LOD2.push_back(inst);
 		}
-
 	}
 
 	//インスタンスバッファの作成・更新
@@ -290,6 +307,10 @@ void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, con
 	//アニメーションごとにインスタンスバッファ更新
 	updateBuffer(m_InstanceBufferIdle, m_InstanceDataIdle);
 	updateBuffer(m_InstanceBufferRun, m_InstanceDataRun);
+	updateBuffer(m_InstanceBufferIdle_LOD1, m_InstanceDataIdle_LOD1);
+	updateBuffer(m_InstanceBufferRun_LOD1, m_InstanceDataRun_LOD1);
+	updateBuffer(m_InstanceBufferIdle_LOD2, m_InstanceDataIdle_LOD2);
+	updateBuffer(m_InstanceBufferRun_LOD2, m_InstanceDataRun_LOD2);
 }
 
 // インスタンスデータ更新（視錐台カリングなし）
@@ -496,6 +517,169 @@ void AnimationModel::DrawCS()
 		}
 	}
 
+	// LOD1描画
+	if (m_AiSceneLOD1 && m_ResourceLOD1)
+	{
+		for (unsigned int m = 0; m < m_AiSceneLOD1->mNumMeshes; m++)
+		{
+			aiMesh* mesh = m_AiSceneLOD1->mMeshes[m];
+			aiMaterial* aimaterial = m_AiSceneLOD1->mMaterials[mesh->mMaterialIndex];
+
+			aiString textureName;
+			aiColor3D diffuse(1.0f, 1.0f, 1.0f);
+			float opacity = 1.0f;
+			aimaterial->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse);
+			aimaterial->Get(AI_MATKEY_OPACITY, opacity);
+
+			ID3D11ShaderResourceView* srv = nullptr;
+			if (aimaterial->GetTexture(aiTextureType_DIFFUSE, 0, &textureName) == AI_SUCCESS)
+				srv = m_ResourceLOD1->GetTexture(textureName.C_Str());
+
+			if (srv) Renderer::GetDeviceContext()->PSSetShaderResources(0, 1, &srv);
+			else {
+				ID3D11ShaderResourceView* nullSRV = nullptr;
+				Renderer::GetDeviceContext()->PSSetShaderResources(0, 1, &nullSRV);
+			}
+
+			MATERIAL mat{};
+			mat.Diffuse = XMFLOAT4(diffuse.r, diffuse.g, diffuse.b, opacity);
+			mat.Ambient = mat.Diffuse;
+			mat.TextureEnable = (srv != nullptr);
+			Renderer::SetMaterial(mat);
+
+			// Idle LOD1
+			if (!m_InstanceDataIdle_LOD1.empty() && m_InstanceBufferIdle_LOD1
+				&& m_BakedBuffers.count("Idle"))
+			{
+				UINT safeM = m % (UINT)m_BakedBuffers["Idle"].size();
+				auto& perMesh = m_BakedBuffers["Idle"][safeM];
+				int frameCount = (int)perMesh.size();
+				if (frameCount > 0)
+				{
+					int fi = m_LastBakedFrame.count("Idle") ? m_LastBakedFrame["Idle"] % frameCount : 0;
+					ID3D11Buffer* skinVB = perMesh[fi];
+					if (skinVB)
+					{
+						ID3D11Buffer* bufs[2] = { skinVB, m_InstanceBufferIdle_LOD1 };
+						UINT strides[2] = { sizeof(VERTEX_SKIN_OUT), sizeof(InstanceData) };
+						UINT offsets[2] = { 0, 0 };
+						Renderer::GetDeviceContext()->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+						Renderer::GetDeviceContext()->IASetIndexBuffer(m_IndexBufferLOD1[m], DXGI_FORMAT_R32_UINT, 0);
+						Renderer::AddDrawCall();
+						Renderer::GetDeviceContext()->DrawIndexedInstanced(
+							mesh->mNumFaces * 3, (UINT)m_InstanceDataIdle_LOD1.size(), 0, 0, 0);
+					}
+				}
+			}
+
+			// Run LOD1
+			if (!m_InstanceDataRun_LOD1.empty() && m_InstanceBufferRun_LOD1
+				&& m_BakedBuffers.count("Run"))
+			{
+				UINT safeM = m % (UINT)m_BakedBuffers["Run"].size();
+				auto& perMesh = m_BakedBuffers["Run"][safeM];
+				int frameCount = (int)perMesh.size();
+				if (frameCount > 0)
+				{
+					int fi = m_LastBakedFrame.count("Run") ? m_LastBakedFrame["Run"] % frameCount : 0;
+					ID3D11Buffer* skinVB = perMesh[fi];
+					if (skinVB)
+					{
+						ID3D11Buffer* bufs[2] = { skinVB, m_InstanceBufferRun_LOD1 };
+						UINT strides[2] = { sizeof(VERTEX_SKIN_OUT), sizeof(InstanceData) };
+						UINT offsets[2] = { 0, 0 };
+						Renderer::GetDeviceContext()->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+						Renderer::GetDeviceContext()->IASetIndexBuffer(m_IndexBufferLOD1[m], DXGI_FORMAT_R32_UINT, 0);
+						Renderer::AddDrawCall();
+						Renderer::GetDeviceContext()->DrawIndexedInstanced(
+							mesh->mNumFaces * 3, (UINT)m_InstanceDataRun_LOD1.size(), 0, 0, 0);
+					}
+				}
+			}
+		}
+	}
+
+	// LOD2描画
+	if (m_AiSceneLOD2 && m_ResourceLOD2)
+	{
+		for (unsigned int m = 0; m < m_AiSceneLOD2->mNumMeshes; m++)
+		{
+			aiMesh* mesh = m_AiSceneLOD2->mMeshes[m];
+			aiMaterial* aimaterial = m_AiSceneLOD2->mMaterials[mesh->mMaterialIndex];
+
+			aiString textureName;
+			aiColor3D diffuse(1.0f, 1.0f, 1.0f);
+			float opacity = 1.0f;
+			aimaterial->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse);
+			aimaterial->Get(AI_MATKEY_OPACITY, opacity);
+
+			ID3D11ShaderResourceView* srv = nullptr;
+			if (aimaterial->GetTexture(aiTextureType_DIFFUSE, 0, &textureName) == AI_SUCCESS)
+				srv = m_ResourceLOD2->GetTexture(textureName.C_Str());
+
+			if (srv) Renderer::GetDeviceContext()->PSSetShaderResources(0, 1, &srv);
+			else {
+				ID3D11ShaderResourceView* nullSRV = nullptr;
+				Renderer::GetDeviceContext()->PSSetShaderResources(0, 1, &nullSRV);
+			}
+
+			MATERIAL mat{};
+			mat.Diffuse = XMFLOAT4(diffuse.r, diffuse.g, diffuse.b, opacity);
+			mat.Ambient = mat.Diffuse;
+			mat.TextureEnable = (srv != nullptr);
+			Renderer::SetMaterial(mat);
+
+			// Idle LOD2
+			if (!m_InstanceDataIdle_LOD2.empty() && m_InstanceBufferIdle_LOD2
+				&& m_BakedBuffers.count("Idle"))
+			{
+				UINT safeM = m % (UINT)m_BakedBuffers["Idle"].size();
+				auto& perMesh = m_BakedBuffers["Idle"][safeM];
+				int frameCount = (int)perMesh.size();
+				if (frameCount > 0)
+				{
+					int fi = m_LastBakedFrame.count("Idle") ? m_LastBakedFrame["Idle"] % frameCount : 0;
+					ID3D11Buffer* skinVB = perMesh[fi];
+					if (skinVB)
+					{
+						ID3D11Buffer* bufs[2] = { skinVB, m_InstanceBufferIdle_LOD2 };
+						UINT strides[2] = { sizeof(VERTEX_SKIN_OUT), sizeof(InstanceData) };
+						UINT offsets[2] = { 0, 0 };
+						Renderer::GetDeviceContext()->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+						Renderer::GetDeviceContext()->IASetIndexBuffer(m_IndexBufferLOD2[m], DXGI_FORMAT_R32_UINT, 0);
+						Renderer::AddDrawCall();
+						Renderer::GetDeviceContext()->DrawIndexedInstanced(
+							mesh->mNumFaces * 3, (UINT)m_InstanceDataIdle_LOD2.size(), 0, 0, 0);
+					}
+				}
+			}
+
+			// Run LOD2
+			if (!m_InstanceDataRun_LOD2.empty() && m_InstanceBufferRun_LOD2
+				&& m_BakedBuffers.count("Run"))
+			{
+				UINT safeM = m % (UINT)m_BakedBuffers["Run"].size();
+				auto& perMesh = m_BakedBuffers["Run"][safeM];
+				int frameCount = (int)perMesh.size();
+				if (frameCount > 0)
+				{
+					int fi = m_LastBakedFrame.count("Run") ? m_LastBakedFrame["Run"] % frameCount : 0;
+					ID3D11Buffer* skinVB = perMesh[fi];
+					if (skinVB)
+					{
+						ID3D11Buffer* bufs[2] = { skinVB, m_InstanceBufferRun_LOD2 };
+						UINT strides[2] = { sizeof(VERTEX_SKIN_OUT), sizeof(InstanceData) };
+						UINT offsets[2] = { 0, 0 };
+						Renderer::GetDeviceContext()->IASetVertexBuffers(0, 2, bufs, strides, offsets);
+						Renderer::GetDeviceContext()->IASetIndexBuffer(m_IndexBufferLOD2[m], DXGI_FORMAT_R32_UINT, 0);
+						Renderer::AddDrawCall();
+						Renderer::GetDeviceContext()->DrawIndexedInstanced(
+							mesh->mNumFaces * 3, (UINT)m_InstanceDataRun_LOD2.size(), 0, 0, 0);
+					}
+				}
+			}
+		}
+	}
 }
 
 // VS描画
@@ -645,6 +829,10 @@ void AnimationModel::Uninit()
 
 	//アシンプデータの解放
 	if (m_AiScene) aiReleaseImport(m_AiScene);
+
+	// LOD 解放
+	if (m_AiSceneLOD1) { aiReleaseImport(m_AiSceneLOD1); m_AiSceneLOD1 = nullptr; }
+	if (m_AiSceneLOD2) { aiReleaseImport(m_AiSceneLOD2); m_AiSceneLOD2 = nullptr; }
 }
 
 // ボーンデータ作成 ノード名＝ボーン名として登録
@@ -880,6 +1068,45 @@ int AnimationModel::GetMeshCount() const
 	return (int)m_AiScene->mNumMeshes;
 }
 
+//ポリゴン数の取得
+int AnimationModel::GetTotalPolygonCount() const
+{
+	if (!m_AiScene) return 0;
+	int total = 0;
+	for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
+		total += (int)m_AiScene->mMeshes[m]->mNumFaces;
+	return total;
+}
+
+// LODモデルの読み込み
+void AnimationModel::LoadLOD(const char* FileNameLOD1, const char* FileNameLOD2)
+{
+	// LOD1
+	m_ResourceLOD1 = new ModelResource();
+	m_AiSceneLOD1 = m_ResourceLOD1->LoadModel(FileNameLOD1);
+
+	UINT numMeshes1 = m_AiSceneLOD1->mNumMeshes;
+	m_VertexBufferLOD1 = new ID3D11Buffer * [numMeshes1];
+	m_IndexBufferLOD1 = new ID3D11Buffer * [numMeshes1];
+	for (UINT m = 0; m < numMeshes1; m++) {
+		m_VertexBufferLOD1[m] = m_ResourceLOD1->GetVertexBuffer(m);
+		m_IndexBufferLOD1[m] = m_ResourceLOD1->GetIndexBuffer(m);
+	}
+
+	// LOD2
+	m_ResourceLOD2 = new ModelResource();
+	m_AiSceneLOD2 = m_ResourceLOD2->LoadModel(FileNameLOD2);
+
+	UINT numMeshes2 = m_AiSceneLOD2->mNumMeshes;
+	m_VertexBufferLOD2 = new ID3D11Buffer * [numMeshes2];
+	m_IndexBufferLOD2 = new ID3D11Buffer * [numMeshes2];
+	for (UINT m = 0; m < numMeshes2; m++) {
+		m_VertexBufferLOD2[m] = m_ResourceLOD2->GetVertexBuffer(m);
+		m_IndexBufferLOD2[m] = m_ResourceLOD2->GetIndexBuffer(m);
+	}
+}
+
+// アニメーションのベイクとディスクへの書き出し
 void AnimationModel::BakeAnimationToDisk(const char* AnimName, const char* OutFilePath)
 {
 	if (!AnimName) return;
@@ -1110,4 +1337,34 @@ bool AnimationModel::WasAnimationBakedThisFrame(const char* AnimName) const
 	if (it == m_AnimationUsedBaked.end()) return false;
 	return it->second;
 }
+
+int AnimationModel::GetLOD1MeshCount() const
+{
+	return m_AiSceneLOD1 ? (int)m_AiSceneLOD1->mNumMeshes : 0;
+}
+
+int AnimationModel::GetLOD2MeshCount() const
+{
+	return m_AiSceneLOD2 ? (int)m_AiSceneLOD2->mNumMeshes : 0;
+}
+
+static int CountPolygonsInScene(const aiScene* scene)
+{
+	if (!scene) return 0;
+	int total = 0;
+	for (unsigned int m = 0; m < scene->mNumMeshes; m++)
+		total += (int)scene->mMeshes[m]->mNumFaces;
+	return total;
+}
+
+int AnimationModel::GetLOD1PolygonCount() const
+{
+	return CountPolygonsInScene(m_AiSceneLOD1);
+}
+
+int AnimationModel::GetLOD2PolygonCount() const
+{
+	return CountPolygonsInScene(m_AiSceneLOD2);
+}
+
 

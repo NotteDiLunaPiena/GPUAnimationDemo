@@ -21,6 +21,7 @@ void Game::Init()
     // 共有アニメーションモデルを1回だけ作成
     m_SharedModel = new AnimationModel();
     m_SharedModel->Load("asset\\model\\Akai.fbx");
+    m_SharedModel->LoadLOD("asset\\model\\Akai01.fbx", "asset\\model\\Akai02.fbx");
     m_SharedModel->LoadAnimation("asset\\model\\Akai_Run.fbx", "Run");
     m_SharedModel->LoadAnimation("asset\\model\\Akai_Idle.fbx", "Idle");
 
@@ -77,8 +78,17 @@ void Game::Update()
     ImGui::Text("FPS            : %d", dwCurrentFPS);
     //インスタンス数
     ImGui::Text("Instance Count : %d", m_SharedModel->GetTotalInstanceCount());
-    //メッシュ数
+    //メッシュ数（メイン）
     ImGui::Text("Mesh Count     : %d", m_SharedModel->GetMeshCount());
+    //ポリゴン数（メイン）
+    ImGui::Text("Polygon Count  : %d", m_SharedModel->GetTotalPolygonCount());
+
+    // LOD1 / LOD2 のメッシュ数とポリゴン数
+    ImGui::Text("LOD1 Mesh Count: %d", m_SharedModel->GetLOD1MeshCount());
+    ImGui::Text("LOD1 Polygon   : %d", m_SharedModel->GetLOD1PolygonCount());
+    ImGui::Text("LOD2 Mesh Count: %d", m_SharedModel->GetLOD2MeshCount());
+    ImGui::Text("LOD2 Polygon   : %d", m_SharedModel->GetLOD2PolygonCount());
+
     //Drawの呼び出し数　（メッシュ数*アニメーションの種類）
     ImGui::Text("Draw Calls     : %d", Renderer::GetDrawCallCount());
     //モデル読み込み対数
@@ -114,7 +124,7 @@ void Game::Update()
         if (ImGui::RadioButton("VertexShader", useVS))
             m_SharedModel->SetSkinningMode(SkinningMode::VertexShader);
 
-        // ★ 現在のモードを文字で表示
+        //現在のモードを文字で表示
         ImGui::Text("Current: %s",
             currentMode == SkinningMode::ComputeShader ? "CS Skinning" : "VS Skinning");
     }
