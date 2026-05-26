@@ -3,11 +3,15 @@
 #include "animationModel.h"
 #include "utility.h"
 #include <d3dcompiler.h>
-#include <corecrt_io.h>
+#include <io.h>
 #include "vector3.h"
 #include "player.h"
 #include "modelResource.h"
 #include "animationPlayer.h"
+#include "instanceDataManager.h"
+#include "animationModelRenderer.h"
+#include "computeSkinningManager.h"
+#include "animationBakeManager.h"
 
 using namespace DirectX;
 
@@ -19,6 +23,9 @@ void AnimationModel::Load(const char* FileName)
 	assert(m_AiScene);
 
 	if (!m_Player)m_Player = new AnimationPlayer();
+	if (!m_InstanceManager) m_InstanceManager = new InstanceDataManager();
+	if (!m_ComputeSkinningManager) m_ComputeSkinningManager = new ComputeSkinningManager();
+	if (!m_BakeManager) m_BakeManager = new AnimationBakeManager();	
 
 	UINT numMeshes = m_AiScene->mNumMeshes;
 
@@ -64,7 +71,7 @@ void AnimationModel::Load(const char* FileName)
 		m_SkinOutputBuffer_Run[m] = nullptr;
 	}
 
-	LoadComputeShader("shader\\CSSkinningCS.cso");
+	m_ComputeSkinningManager->LoadComputeShader("shader\\CSSkinningCS.cso");
 	Renderer::CreateCSSkinningVertexShader(&m_CS_VertexShader, &m_CS_VertexLayout, "shader\\CSSkinningVS.cso");
 	Renderer::CreateVSSkinningVertexShader(&m_VS_VertexShader, &m_VS_VertexLayout, "shader\\VSSkinningVS.cso");
 	Renderer::CreatePixelShader(&m_CS_PixelShader, "shader\\SkinningPS.cso");
@@ -133,16 +140,16 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 	for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
 	{
 		UINT numVertices = m_AiScene->mMeshes[m]->mNumVertices;
-		UINT groupCount = (numVertices + SKINNING_THREAD_GROUP_SIZE - 1) / SKINNING_THREAD_GROUP_SIZE;
 
 		m_ComputeDispatchCount++;
 		if (Anim1) m_AnimationUsedBaked[Anim1] = false;
 
-		Renderer::GetDeviceContext()->CSSetShader(m_SkinningCS, nullptr, 0);
-		Renderer::GetDeviceContext()->CSSetConstantBuffers(5, 1, &m_BoneConstantBuffer);
-		Renderer::GetDeviceContext()->CSSetShaderResources(0, 1, &m_SkinInputSRV[m]);
-		Renderer::GetDeviceContext()->CSSetUnorderedAccessViews(0, 1, &m_SkinOutputUAV[m], nullptr);
-		Renderer::GetDeviceContext()->Dispatch(groupCount, 1, 1);
+		m_ComputeSkinningManager->Dispatch(
+			m_BoneConstantBuffer,
+			m_SkinInputSRV[m],
+			m_SkinOutputUAV[m],
+			numVertices
+		);
 
 		ID3D11Buffer** targetBuffer = nullptr;
 		if (animName == "Idle") targetBuffer = &m_SkinOutputBuffer_Idle[m];
@@ -161,215 +168,22 @@ void AnimationModel::Update(const char* Anim1, int Frame1, const char* Anim2, in
 			Renderer::GetDeviceContext()->CopyResource(*targetBuffer, m_SkinOutputBuffer[m]);
 		}
 
-		ID3D11UnorderedAccessView* nullUAV[1] = { nullptr };
-		ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
-		Renderer::GetDeviceContext()->CSSetUnorderedAccessViews(0, 1, nullUAV, nullptr);
-		Renderer::GetDeviceContext()->CSSetShaderResources(0, 1, nullSRV);
 	}
-	Renderer::GetDeviceContext()->CSSetShader(nullptr, nullptr, 0);
 }
 
-// インスタンスデータ更新
+// インスタンスデータ更新(視錐台カリングあり)
 void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players, const XMMATRIX& view, const XMMATRIX& proj)
 {
-	//インスタンス配列の初期化
-	m_InstanceDataIdle.clear();
-	m_InstanceDataRun.clear();
-	// ビュープロジェクション行列から視錐台の6平面を抽出
-	XMMATRIX vp = XMMatrixMultiply(view, proj);
-
-	XMFLOAT4X4 m;
-	XMStoreFloat4x4(&m, XMMatrixTranspose(vp));
-
-	// 各平面を計算（left, right, top, bottom, near, far）
-	XMFLOAT4 planes[6];
-	// Left
-	planes[0] = { m._41 + m._11, m._42 + m._12, m._43 + m._13, m._44 + m._14 };
-	// Right
-	planes[1] = { m._41 - m._11, m._42 - m._12, m._43 - m._13, m._44 - m._14 };
-	// Bottom
-	planes[2] = { m._41 + m._21, m._42 + m._22, m._43 + m._23, m._44 + m._24 };
-	// Top
-	planes[3] = { m._41 - m._21, m._42 - m._22, m._43 - m._23, m._44 - m._24 };
-	// Near
-	planes[4] = { m._41 + m._31, m._42 + m._32, m._43 + m._33, m._44 + m._34 };
-	// Far
-	planes[5] = { m._41 - m._31, m._42 - m._32, m._43 - m._33, m._44 - m._34 };
-
-	// 各平面を正規化
-	for (auto& p : planes)
-	{
-		float len = sqrtf(p.x * p.x + p.y * p.y + p.z * p.z);
-		p.x /= len; p.y /= len; p.z /= len; p.w /= len;
-	}
-
-
-	//全プレイヤー分のインスタンスデータの作成
-	for (auto* player : players)
-	{
-		Vector3 pos = player->GetPosition();
-		Vector3 rot = player->GetRotation();
-		Vector3 scale = player->GetScale();
-
-		// 視錐台の外側にいるか判定（半径1.0fの球として判定）
-		const float radius = 1.0f;
-		bool culled = false;
-		for (auto& plane : planes)
-		{
-			float dist = plane.x * pos.x + plane.y * pos.y
-				+ plane.z * pos.z + plane.w;
-			if (dist < -radius)
-			{
-				culled = true;
-				break;
-			}
-		}
-		if (culled) continue; // 視錐台外はスキップ
-
-		InstanceData inst{};
-
-
-		//ワールド行列の作成
-		XMMATRIX world =
-			XMMatrixScaling(scale.x, scale.y, scale.z) *
-			XMMatrixRotationRollPitchYaw(rot.x, rot.y, rot.z) *
-			XMMatrixTranslation(pos.x, pos.y, pos.z);
-
-		//GPU用のインスタンスデータに格納
-		XMStoreFloat4x4(&inst.World, world);
-		inst.Frame = (float)player->GetFrame();
-
-		// Idle / Run の duration を取得してセット
-		const char* animName = player->IsRunning() ? "Run" : "Idle";
-		const aiScene* animScene = m_Resource->GetAnimationScene(animName);
-		if (animScene && animScene->HasAnimations()) {
-			inst.Duration = (float)(int)animScene->mAnimations[0]->mDuration;
-		}
-		else {
-			inst.Duration = 1.0f;
-		}
-
-
-		//プレイヤーのアニメーション状態に応じて振り分け　（同じアニメーションをまとめて描画するため）
-		if (player->IsRunning())
-		{
-			inst.AnimationIndex = 1;
-			m_InstanceDataRun.push_back(inst);
-		}
-		else
-		{
-			inst.AnimationIndex = 0;
-			m_InstanceDataIdle.push_back(inst);
-		}
-
-	}
-
-	//インスタンスバッファの作成・更新
-	auto updateBuffer = [](ID3D11Buffer*& buffer, const std::vector<InstanceData>& data)
-		{
-			if (data.empty()) return;
-
-			//バッファが未作成なら作成
-			if (!buffer)
-			{
-				D3D11_BUFFER_DESC desc = {};
-				desc.Usage = D3D11_USAGE_DYNAMIC;	//毎フレーム更新
-				desc.ByteWidth = sizeof(InstanceData) * MAX_INSTANCE_COUNT;
-				desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-				desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;	//GPU書き込み可能
-				Renderer::GetDevice()->CreateBuffer(&desc, nullptr, &buffer);
-			}
-
-			//GPUへのデータ転送
-			D3D11_MAPPED_SUBRESOURCE mapped = {};
-			Renderer::GetDeviceContext()->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-			memcpy(mapped.pData, data.data(), sizeof(InstanceData) * data.size());
-			Renderer::GetDeviceContext()->Unmap(buffer, 0);
-	};
-
-	//アニメーションごとにインスタンスバッファ更新
-	updateBuffer(m_InstanceBufferIdle, m_InstanceDataIdle);
-	updateBuffer(m_InstanceBufferRun, m_InstanceDataRun);
+	if (!m_InstanceManager) return;
+	m_InstanceManager->UpdateWithCulling(players, m_Resource, view, proj);
 }
 
+// インスタンスデータ更新（視錐台カリングなし）
 void AnimationModel::UpdateInstanceData(const std::vector<Player*>& players)
 {
-	//インスタンス配列の初期化
-	m_InstanceDataIdle.clear();
-	m_InstanceDataRun.clear();
-
-	//全プレイヤー分のインスタンスデータの作成
-	for (auto* player : players)
-	{
-		InstanceData inst{};
-
-		Vector3 pos = player->GetPosition();
-		Vector3 rot = player->GetRotation();
-		Vector3 scale = player->GetScale();
-
-		//ワールド行列の作成
-		XMMATRIX world =
-			XMMatrixScaling(scale.x, scale.y, scale.z) *
-			XMMatrixRotationRollPitchYaw(rot.x, rot.y, rot.z) *
-			XMMatrixTranslation(pos.x, pos.y, pos.z);
-
-		//GPU用のインスタンスデータに格納
-		XMStoreFloat4x4(&inst.World, world);
-		inst.Frame = (float)player->GetFrame();
-
-		// Idle / Run の duration を取得してセット
-		const char* animName = player->IsRunning() ? "Run" : "Idle";
-		const aiScene* animScene = m_Resource->GetAnimationScene(animName);
-		if (animScene && animScene->HasAnimations()) {
-			inst.Duration = (float)(int)animScene->mAnimations[0]->mDuration;
-		}
-		else {
-			inst.Duration = 1.0f;
-		}
-
-
-		//プレイヤーのアニメーション状態に応じて振り分け　（同じアニメーションをまとめて描画するため）
-		if (player->IsRunning())
-		{
-			inst.AnimationIndex = 1;
-			m_InstanceDataRun.push_back(inst);
-		}
-		else
-		{
-			inst.AnimationIndex = 0;
-			m_InstanceDataIdle.push_back(inst);
-		}
-
-	}
-
-	//インスタンスバッファの作成・更新
-	auto updateBuffer = [](ID3D11Buffer*& buffer, const std::vector<InstanceData>& data)
-		{
-			if (data.empty()) return;
-
-			//バッファが未作成なら作成
-			if (!buffer)
-			{
-				D3D11_BUFFER_DESC desc = {};
-				desc.Usage = D3D11_USAGE_DYNAMIC;	//毎フレーム更新
-				desc.ByteWidth = sizeof(InstanceData) * MAX_INSTANCE_COUNT;
-				desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-				desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;	//GPU書き込み可能
-				Renderer::GetDevice()->CreateBuffer(&desc, nullptr, &buffer);
-			}
-
-			//GPUへのデータ転送
-			D3D11_MAPPED_SUBRESOURCE mapped = {};
-			Renderer::GetDeviceContext()->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-			memcpy(mapped.pData, data.data(), sizeof(InstanceData) * data.size());
-			Renderer::GetDeviceContext()->Unmap(buffer, 0);
-		};
-
-	//アニメーションごとにインスタンスバッファ更新
-	updateBuffer(m_InstanceBufferIdle, m_InstanceDataIdle);
-	updateBuffer(m_InstanceBufferRun, m_InstanceDataRun);
+	if (!m_InstanceManager) return;
+	m_InstanceManager->Update(players, m_Resource);
 }
-
 
 // 描画
 void AnimationModel::Draw() {
@@ -382,18 +196,14 @@ void AnimationModel::Draw() {
 // CS描画
 void AnimationModel::DrawCS()
 {
+	if (!m_InstanceManager) return;
+
 	//シェーダーと入力レイアウトの設定
 	Renderer::GetDeviceContext()->VSSetShader(m_CS_VertexShader, NULL, 0);
 	Renderer::GetDeviceContext()->PSSetShader(m_CS_PixelShader, NULL, 0);
 	Renderer::GetDeviceContext()->IASetInputLayout(m_CS_VertexLayout);
 	Renderer::GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	//マテリアル設定
-	MATERIAL material{};
-	material.Diffuse = XMFLOAT4(1, 1, 1, 1);
-	material.Ambient = material.Diffuse;
-	material.TextureEnable = true;
-	Renderer::SetMaterial(material);
 
 	//メッシュ単位で描画
 	for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
@@ -401,175 +211,62 @@ void AnimationModel::DrawCS()
 		aiMesh* mesh = m_AiScene->mMeshes[m];
 		aiMaterial* aimaterial = m_AiScene->mMaterials[mesh->mMaterialIndex];
 
-		// --- テクスチャ設定セクション ---
-		aiString textureName;
-		aiColor3D diffuse(1.0f, 1.0f, 1.0f); // 初期値を白に
-		float opacity = 1.0f;
-
-		// マテリアルから情報を取得
-		aimaterial->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse);
-		aimaterial->Get(AI_MATKEY_OPACITY, opacity);
-
-		// テクスチャ名の取得とセット
-		ID3D11ShaderResourceView* srv = nullptr;
-		if (aimaterial->GetTexture(aiTextureType_DIFFUSE, 0, &textureName) == AI_SUCCESS) {
-			srv = m_Resource->GetTexture(textureName.C_Str());
-		}
-
-		if (srv) {
-			Renderer::GetDeviceContext()->PSSetShaderResources(0, 1, &srv);
-			material.TextureEnable = true;
-		}
-		else {
-			// テクスチャがない時は null をセットして前のメッシュのテクスチャを解除する
-			ID3D11ShaderResourceView* nullSRV = nullptr;
-			Renderer::GetDeviceContext()->PSSetShaderResources(0, 1, &nullSRV);
-			material.TextureEnable = false;
-		}
-
-		// マテリアルの最終適用（1回でOK）
-		material.Diffuse = XMFLOAT4(diffuse.r, diffuse.g, diffuse.b, opacity);
-		material.Ambient = material.Diffuse;
-		Renderer::SetMaterial(material);
+		AnimationModelRenderer::ApplyMaterial(aimaterial, m_Resource);
 
 		// Idleキャラの描画
-		if (!m_InstanceDataIdle.empty())
-		{
-			// スキニング後の頂点バッファ（ベイクがあればそれを使う）
-			ID3D11Buffer* skinVB = nullptr;
-			if (m_BakedBuffers.count("Idle"))
-			{
-				auto& perMesh = m_BakedBuffers["Idle"][m];
-				int frameCount = (int)perMesh.size();
-				if (frameCount > 0)
-				{
-					int frameIndex = 0;
-					if (m_LastBakedFrame.count("Idle")) frameIndex = m_LastBakedFrame["Idle"] % frameCount;
-					skinVB = perMesh[frameIndex];
-				}
-			}
-			else
-			{
-				skinVB = m_SkinOutputBuffer_Idle[m];
-			}
-
-			if (skinVB) {
-				ID3D11Buffer* buffersIdle[2] = { skinVB, m_InstanceBufferIdle };
-				UINT stridesIdle[2] = { sizeof(VERTEX_SKIN_OUT), sizeof(InstanceData) };
-				UINT offsetsIdle[2] = { 0, 0 };
-				Renderer::GetDeviceContext()->IASetVertexBuffers(0, 2, buffersIdle, stridesIdle, offsetsIdle);
-				Renderer::GetDeviceContext()->IASetIndexBuffer(m_IndexBuffer[m], DXGI_FORMAT_R32_UINT, 0);
-				Renderer::AddDrawCall();
-				Renderer::GetDeviceContext()->DrawIndexedInstanced(mesh->mNumFaces * 3, (UINT)m_InstanceDataIdle.size(), 0, 0, 0);
-			}
-		}
-
+		DrawCSAnimation(
+			m,
+			mesh,
+			"Idle",
+			m_InstanceManager->GetIdleBuffer(),
+			(UINT)m_InstanceManager->GetIdleData().size()
+		);
 		// Runキャラの描画
-		if (!m_InstanceDataRun.empty())
-		{
-			ID3D11Buffer* skinVB = nullptr;
-			if (m_BakedBuffers.count("Run"))
-			{
-				auto& perMesh = m_BakedBuffers["Run"][m];
-				int frameCount = (int)perMesh.size();
-				if (frameCount > 0)
-				{
-					int frameIndex = 0;
-					if (m_LastBakedFrame.count("Run")) frameIndex = m_LastBakedFrame["Run"] % frameCount;
-					skinVB = perMesh[frameIndex];
-				}
-			}
-			else
-			{
-				skinVB = m_SkinOutputBuffer_Run[m];
-			}
-
-			if (skinVB) {
-				ID3D11Buffer* buffersRun[2] = { skinVB, m_InstanceBufferRun };
-				UINT stridesRun[2] = { sizeof(VERTEX_SKIN_OUT), sizeof(InstanceData) };
-				UINT offsetsRun[2] = { 0, 0 };
-				Renderer::GetDeviceContext()->IASetVertexBuffers(0, 2, buffersRun, stridesRun, offsetsRun);
-				Renderer::GetDeviceContext()->IASetIndexBuffer(m_IndexBuffer[m], DXGI_FORMAT_R32_UINT, 0);
-				Renderer::AddDrawCall();
-				Renderer::GetDeviceContext()->DrawIndexedInstanced(mesh->mNumFaces * 3, (UINT)m_InstanceDataRun.size(), 0, 0, 0);
-			}
-		}
+		DrawCSAnimation(
+			m,
+			mesh,
+			"Run",
+			m_InstanceManager->GetRunBuffer(),
+			(UINT)m_InstanceManager->GetRunData().size()
+		);
 	}
-
 }
 
 // VS描画
 void AnimationModel::DrawVS()
 {
+	if (!m_InstanceManager) return;
+
 	Renderer::GetDeviceContext()->VSSetShader(m_VS_VertexShader, NULL, 0);
 	Renderer::GetDeviceContext()->PSSetShader(m_VS_PixelShader, NULL, 0);
 	Renderer::GetDeviceContext()->IASetInputLayout(m_VS_VertexLayout);
 	Renderer::GetDeviceContext()->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	MATERIAL material{};
-	material.Diffuse = XMFLOAT4(1, 1, 1, 1);
-	material.Ambient = material.Diffuse;
-	material.TextureEnable = true;
-	Renderer::SetMaterial(material);
 
 	for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
 	{
 		aiMesh* mesh = m_AiScene->mMeshes[m];
 		aiMaterial* aimaterial = m_AiScene->mMaterials[mesh->mMaterialIndex];
 
-		// テクスチャ設定
-		aiString   textureName;
-		aiColor3D  diffuse(1.0f, 1.0f, 1.0f);
-		float      opacity = 1.0f;
-		aimaterial->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse);
-		aimaterial->Get(AI_MATKEY_OPACITY, opacity);
+		AnimationModelRenderer::ApplyMaterial(aimaterial, m_Resource);
 
-		ID3D11ShaderResourceView* srv = nullptr;
-		if (aimaterial->GetTexture(aiTextureType_DIFFUSE, 0, &textureName) == AI_SUCCESS)
-			srv = m_Resource->GetTexture(textureName.C_Str());
 
-		if (srv) {
-			Renderer::GetDeviceContext()->PSSetShaderResources(0, 1, &srv);
-			material.TextureEnable = true;
-		}
-		else {
-			ID3D11ShaderResourceView* nullSRV = nullptr;
-			Renderer::GetDeviceContext()->PSSetShaderResources(0, 1, &nullSRV);
-			material.TextureEnable = false;
-		}
-		material.Diffuse = XMFLOAT4(diffuse.r, diffuse.g, diffuse.b, opacity);
-		material.Ambient = material.Diffuse;
-		Renderer::SetMaterial(material);
-
-		// ★ Idle 描画：Idle用 StructuredBuffer を t1 にセット
-		if (!m_InstanceDataIdle.empty() && m_InstanceBufferIdle && m_VS_BoneMatrixSRV_Idle)
-		{
-			Renderer::GetDeviceContext()->VSSetShaderResources(1, 1, &m_VS_BoneMatrixSRV_Idle);
-
-			ID3D11Buffer* buffers[2] = { m_VertexBuffer[m], m_InstanceBufferIdle };
-			UINT strides[2] = { sizeof(VERTEX_3D), sizeof(InstanceData) };
-			UINT offsets[2] = { 0, 0 };
-			Renderer::GetDeviceContext()->IASetVertexBuffers(0, 2, buffers, strides, offsets);
-			Renderer::GetDeviceContext()->IASetIndexBuffer(m_IndexBuffer[m], DXGI_FORMAT_R32_UINT, 0);
-			Renderer::AddDrawCall();
-			Renderer::GetDeviceContext()->DrawIndexedInstanced(
-				mesh->mNumFaces * 3, (UINT)m_InstanceDataIdle.size(), 0, 0, 0);
-		}
-
-		//Run 描画：Run用 StructuredBuffer を t1 にセット
-		if (!m_InstanceDataRun.empty() && m_InstanceBufferRun && m_VS_BoneMatrixSRV_Run)
-		{
-			Renderer::GetDeviceContext()->VSSetShaderResources(1, 1, &m_VS_BoneMatrixSRV_Run);
-
-			ID3D11Buffer* buffers[2] = { m_VertexBuffer[m], m_InstanceBufferRun };
-			UINT strides[2] = { sizeof(VERTEX_3D), sizeof(InstanceData) };
-			UINT offsets[2] = { 0, 0 };
-			Renderer::GetDeviceContext()->IASetVertexBuffers(0, 2, buffers, strides, offsets);
-			Renderer::GetDeviceContext()->IASetIndexBuffer(m_IndexBuffer[m], DXGI_FORMAT_R32_UINT, 0);
-			Renderer::AddDrawCall();
-			Renderer::GetDeviceContext()->DrawIndexedInstanced(
-				mesh->mNumFaces * 3, (UINT)m_InstanceDataRun.size(), 0, 0, 0);
-		}
+		//Idle 描画
+		DrawVSAnimation(
+			m,
+			mesh,
+			m_InstanceManager->GetIdleBuffer(),
+			(UINT)m_InstanceManager->GetIdleData().size(),
+			m_VS_BoneMatrixSRV_Idle
+		);
+		//Run 描画
+		DrawVSAnimation(
+			m,
+			mesh,
+			m_InstanceManager->GetRunBuffer(),
+			(UINT)m_InstanceManager->GetRunData().size(),
+			m_VS_BoneMatrixSRV_Run
+		);
 	}
 
 	// SRV のバインド解除
@@ -577,51 +274,108 @@ void AnimationModel::DrawVS()
 	Renderer::GetDeviceContext()->VSSetShaderResources(1, 1, &nullSRV);
 }
 
+void AnimationModel::DrawCSAnimation(unsigned int meshIndex, aiMesh* mesh, const char* animName, ID3D11Buffer* instanceBuffer, UINT instanceCount)
+{
+	if (!mesh || !animName) return;
+	if (!instanceBuffer || instanceCount == 0) return;
+
+	ID3D11Buffer* skinVB = nullptr;
+	std::string name = animName;
+
+	if (m_BakedBuffers.count(name))
+	{
+		auto& perMesh = m_BakedBuffers[name][meshIndex];
+		int frameCount = (int)perMesh.size();
+
+		if (frameCount > 0)
+		{
+			int frameIndex = 0;
+
+			if (m_LastBakedFrame.count(name))
+			{
+				frameIndex = m_LastBakedFrame[name] % frameCount;
+			}
+
+			skinVB = perMesh[frameIndex];
+		}
+	}
+	else
+	{
+		if (name == "Idle")
+		{
+			skinVB = m_SkinOutputBuffer_Idle[meshIndex];
+		}
+		else if (name == "Run")
+		{
+			skinVB = m_SkinOutputBuffer_Run[meshIndex];
+		}
+	}
+
+	if (!skinVB) return;
+
+	AnimationModelRenderer::DrawInstancedMesh(
+		skinVB,
+		instanceBuffer,
+		m_IndexBuffer[meshIndex],
+		sizeof(VERTEX_SKIN_OUT),
+		instanceCount,
+		mesh->mNumFaces * 3
+	);
+}
+
+void AnimationModel::DrawVSAnimation(unsigned int meshIndex, aiMesh* mesh, ID3D11Buffer* instanceBuffer, UINT instanceCount, ID3D11ShaderResourceView* boneSRV)
+{
+	if (!mesh) return;
+	if (!instanceBuffer || instanceCount == 0) return;
+	if (!boneSRV) return;
+
+	Renderer::GetDeviceContext()->VSSetShaderResources(1, 1, &boneSRV);
+
+	AnimationModelRenderer::DrawInstancedMesh(
+		m_VertexBuffer[meshIndex],
+		instanceBuffer,
+		m_IndexBuffer[meshIndex],
+		sizeof(VERTEX_3D),
+		instanceCount,
+		mesh->mNumFaces * 3
+	);
+}
+
 // 解放
 void AnimationModel::Uninit()
 {
-	m_Player->Uninit();
-
-	//GPUリソースの解放
-	if (m_VertexBuffer)
+	if (m_AiScene)
 	{
 		for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
 		{
 			SafeRelease(m_VertexBuffer[m]);
-			if (m_IndexBuffer) SafeRelease(m_IndexBuffer[m]);
-			if (m_SkinInputBuffer) SafeRelease(m_SkinInputBuffer[m]);
-			if (m_SkinInputSRV) SafeRelease(m_SkinInputSRV[m]);
-			if (m_SkinOutputBuffer) SafeRelease(m_SkinOutputBuffer[m]);
-			if (m_SkinOutputUAV) SafeRelease(m_SkinOutputUAV[m]);
+			SafeRelease(m_IndexBuffer[m]);
+
+			SafeRelease(m_SkinInputBuffer[m]);
+			SafeRelease(m_SkinInputSRV[m]);
+
+			SafeRelease(m_SkinOutputBuffer[m]);
+			SafeRelease(m_SkinOutputUAV[m]);
+
+			SafeRelease(m_CS_VertexBufferGPU[m]);
+
+			SafeRelease(m_SkinOutputBuffer_Idle[m]);
+			SafeRelease(m_SkinOutputBuffer_Run[m]);
 		}
-		SafeDeleteArray(m_VertexBuffer);
 	}
 
+	SafeDeleteArray(m_VertexBuffer);
 	SafeDeleteArray(m_IndexBuffer);
 	SafeDeleteArray(m_SkinInputBuffer);
 	SafeDeleteArray(m_SkinInputSRV);
 	SafeDeleteArray(m_SkinOutputBuffer);
 	SafeDeleteArray(m_SkinOutputUAV);
+	SafeDeleteArray(m_CS_VertexBufferGPU);
 
 	ReleaseBakedAnimations();
 
-	if (m_CS_VertexBufferGPU)
-	{
-		for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
-			SafeRelease(m_CS_VertexBufferGPU[m]);
-		SafeDeleteArray(m_CS_VertexBufferGPU);
-	}
-
-	for (unsigned int m = 0; m < m_AiScene->mNumMeshes; m++)
-	{
-		SafeRelease(m_SkinOutputBuffer_Idle[m]);
-		SafeRelease(m_SkinOutputBuffer_Run[m]);
-	}
-
-	//シェーダー・定数バッファの解放
 	SafeRelease(m_BoneConstantBuffer);
 
-	SafeRelease(m_SkinningCS);
 	SafeRelease(m_CS_VertexShader);
 	SafeRelease(m_CS_PixelShader);
 	SafeRelease(m_CS_VertexLayout);
@@ -630,116 +384,60 @@ void AnimationModel::Uninit()
 	SafeRelease(m_VS_VertexShader);
 	SafeRelease(m_VS_PixelShader);
 
-	SafeRelease(m_InstanceBufferIdle);
-	SafeRelease(m_InstanceBufferRun);
+	SafeRelease(m_VS_BoneMatrixBuffer_Idle);
+	SafeRelease(m_VS_BoneMatrixSRV_Idle);
+	SafeRelease(m_VS_BoneMatrixBuffer_Run);
+	SafeRelease(m_VS_BoneMatrixSRV_Run);
 
-	// ★ VS パス用 StructuredBuffer の解放
-	if (m_VS_BoneMatrixBuffer_Idle) { m_VS_BoneMatrixBuffer_Idle->Release(); m_VS_BoneMatrixBuffer_Idle = nullptr; }
-	if (m_VS_BoneMatrixSRV_Idle) { m_VS_BoneMatrixSRV_Idle->Release();    m_VS_BoneMatrixSRV_Idle = nullptr; }
-	if (m_VS_BoneMatrixBuffer_Run) { m_VS_BoneMatrixBuffer_Run->Release();  m_VS_BoneMatrixBuffer_Run = nullptr; }
-	if (m_VS_BoneMatrixSRV_Run) { m_VS_BoneMatrixSRV_Run->Release();     m_VS_BoneMatrixSRV_Run = nullptr; }
-
-	//テクスチャの解放
-	for (auto& pair : m_Texture) SafeRelease(pair.second);
-	m_Texture.clear();
-
-	//アシンプデータの解放
-	if (m_AiScene) aiReleaseImport(m_AiScene);
-}
-
-// ボーンデータ作成 ノード名＝ボーン名として登録
-void AnimationModel::CreateBone(aiNode* node)
-{
-	BONE bone;
-	auto Bones = m_Player->GetBones();
-	Bones[node->mName.C_Str()] = bone;
-
-	// 子ノードへ再帰
-	for (unsigned int n = 0; n < node->mNumChildren; n++)
+	if (m_InstanceManager)
 	{
-		CreateBone(node->mChildren[n]);
+		m_InstanceManager->Uninit();
+		delete m_InstanceManager;
+		m_InstanceManager = nullptr;
 	}
+
+	if (m_ComputeSkinningManager)
+	{
+		m_ComputeSkinningManager->Uninit();
+		delete m_ComputeSkinningManager;
+		m_ComputeSkinningManager = nullptr;
+	}
+
+	if (m_BakeManager)
+	{
+		delete m_BakeManager;
+		m_BakeManager = nullptr;
+	}
+
+	if (m_Player)
+	{
+		m_Player->Uninit();
+		delete m_Player;
+		m_Player = nullptr;
+	}
+
+	if (m_Resource)
+	{
+		m_Resource->Uninit();
+		delete m_Resource;
+		m_Resource = nullptr;
+	}
+
+	m_AiScene = nullptr;
 }
 
 // コンピュートシェーダ用スキニングバッファ作成
 void AnimationModel::CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex)
 {
-	if (vertices == nullptr || vertexCount == 0) {
-		// ここで止まるなら、頂点データの抽出に失敗しています
-		assert(false && "頂点データが空です");
-		return;
-	}
-
-	// 入力（Vertex Shader → Compute Shader）バッファ
-	ID3D11Device* device = Renderer::GetDevice();
-	if (!device) {
-		// ここで止まるなら、Rendererの初期化漏れです
-		assert(false && "DirectX Deviceが準備できていません");
-		return;
-	}
-
-
-	D3D11_BUFFER_DESC inDesc{};
-	inDesc.Usage = D3D11_USAGE_DEFAULT;
-	inDesc.ByteWidth = sizeof(VERTEX_3D) * vertexCount;
-	inDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-	inDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-	inDesc.StructureByteStride = sizeof(VERTEX_3D);
-
-	D3D11_SUBRESOURCE_DATA initData{};
-	initData.pSysMem = vertices;
-	device->CreateBuffer(&inDesc, &initData, &m_SkinInputBuffer[meshIndex]);
-
-	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-	srvDesc.Buffer.NumElements = vertexCount;
-	device->CreateShaderResourceView(m_SkinInputBuffer[meshIndex], &srvDesc, &m_SkinInputSRV[meshIndex]);
-
-	// 出力（Compute Shader → Vertex Shader）バッファ
-	D3D11_BUFFER_DESC outDesc{};
-	outDesc.Usage = D3D11_USAGE_DEFAULT;
-	outDesc.ByteWidth = sizeof(VERTEX_SKIN_OUT) * vertexCount;
-	outDesc.StructureByteStride = sizeof(VERTEX_SKIN_OUT);
-	outDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
-	outDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-	outDesc.CPUAccessFlags = 0;
-
-	HRESULT hr = device->CreateBuffer(&outDesc, nullptr, &m_SkinOutputBuffer[meshIndex]);
-	assert(SUCCEEDED(hr));
-
-	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-	uavDesc.Format = DXGI_FORMAT_UNKNOWN;
-	uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-	uavDesc.Buffer.NumElements = vertexCount;
-	hr = device->CreateUnorderedAccessView(m_SkinOutputBuffer[meshIndex], &uavDesc, &m_SkinOutputUAV[meshIndex]);
-	assert(SUCCEEDED(hr));
-
-	// IA入力用頂点バッファを作成
-	D3D11_BUFFER_DESC vbDesc{};
-	vbDesc.Usage = D3D11_USAGE_DEFAULT;
-	vbDesc.ByteWidth = sizeof(VERTEX_SKIN_OUT) * vertexCount;
-	vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	vbDesc.CPUAccessFlags = 0;
-	vbDesc.MiscFlags = 0;
-
-	HRESULT hr2 = device->CreateBuffer(&vbDesc, nullptr, &m_CS_VertexBufferGPU[meshIndex]);
-	assert(SUCCEEDED(hr2));
-}
-
-// コンピュートシェーダ読み込み
-void AnimationModel::LoadComputeShader(const char* FileName)
-{
-	FILE* file = fopen(FileName, "rb");
-	assert(file);
-	long int fsize = _filelength(_fileno(file));
-	unsigned char* buffer = new unsigned char[fsize];
-	fread(buffer, fsize, 1, file);
-	fclose(file);
-
-	HRESULT hr = Renderer::GetDevice()->CreateComputeShader(buffer, fsize, nullptr, &m_SkinningCS);
-	if (FAILED(hr)) MessageBox(nullptr, "ComputeShader の作成に失敗しました。", "Error", MB_OK);
-	delete[] buffer;
+	m_ComputeSkinningManager->CreateSkinningBuffers(
+		vertices,
+		vertexCount,
+		&m_SkinInputBuffer[meshIndex],
+		&m_SkinInputSRV[meshIndex],
+		&m_SkinOutputBuffer[meshIndex],
+		&m_SkinOutputUAV[meshIndex],
+		&m_CS_VertexBufferGPU[meshIndex]
+	);
 }
 
 // aiMatrix4x4をXMMATRIXに変換
@@ -800,6 +498,7 @@ VERTEX_3D* AnimationModel::GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIn
 	return vertices;
 }
 
+// VS用のボーン行列バッファを作成
 void AnimationModel::BuildVSBoneMatrixBuffer(const char* AnimName)
 {
 	const aiScene* animScene = m_Resource->GetAnimationScene(AnimName);
@@ -881,115 +580,29 @@ int AnimationModel::GetMeshCount() const
 
 void AnimationModel::BakeAnimationToDisk(const char* AnimName, const char* OutFilePath)
 {
-	if (!AnimName) return;
+	if (!m_BakeManager) return;
+
 	const aiScene* animScene = m_Resource->GetAnimationScene(AnimName);
-	if (!animScene || !animScene->HasAnimations()) return;
+	if (!animScene) return;
 
-	aiAnimation* animation = animScene->mAnimations[0];
-	int duration = (int)animation->mDuration;
-	if (duration <= 0) return;
+	m_BakeManager->BakeAnimation(
+		AnimName,
+		OutFilePath,
 
-	UINT numMeshes = m_AiScene->mNumMeshes;
-	ID3D11Device* device = Renderer::GetDevice();
-	ID3D11DeviceContext* ctx = Renderer::GetDeviceContext();
+		m_Player,
 
-	// ステージングバッファをメッシュごとに作成（Mapして読み出すため）
-	std::vector<ID3D11Buffer*> staging(numMeshes, nullptr);
-	for (UINT m = 0; m < numMeshes; ++m)
-	{
-		UINT numVertices = m_AiScene->mMeshes[m]->mNumVertices;
-		D3D11_BUFFER_DESC sd{};
-		sd.Usage = D3D11_USAGE_STAGING;
-		sd.ByteWidth = sizeof(VERTEX_SKIN_OUT) * numVertices;
-		sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-		sd.BindFlags = 0;
-		sd.MiscFlags = 0;
-		HRESULT hr = device->CreateBuffer(&sd, nullptr, &staging[m]);
-		assert(SUCCEEDED(hr));
-	}
+		m_AiScene,
+		animScene,
 
-	// 出力ファイルを開く（バイナリ）
-	FILE* f = fopen(OutFilePath, "wb");
-	if (!f) {
-		for (auto b : staging) if (b) b->Release();
-		return;
-	}
+		m_BoneConstantBuffer,
+		m_ComputeSkinningManager,
 
-	// ヘッダ: メッシュ数
-	uint32_t meshCountU32 = (uint32_t)numMeshes;
-	fwrite(&meshCountU32, sizeof(meshCountU32), 1, f);
+		m_SkinInputSRV,
+		m_SkinOutputUAV,
+		m_SkinOutputBuffer,
 
-	// 各メッシュの基本情報を書き出す（vertexCount, frameCount, stride）
-	for (UINT m = 0; m < numMeshes; ++m)
-	{
-		uint32_t vertexCount = (uint32_t)m_AiScene->mMeshes[m]->mNumVertices;
-		uint32_t frameCount = (uint32_t)duration;
-		uint32_t stride = (uint32_t)sizeof(VERTEX_SKIN_OUT);
-		fwrite(&vertexCount, sizeof(vertexCount), 1, f);
-		fwrite(&frameCount, sizeof(frameCount), 1, f);
-		fwrite(&stride, sizeof(stride), 1, f);
-	}
-
-	// フレームごとにボーン計算 → CS Dispatch → ステージングへコピー → ファイル書き込み
-	for (int frame = 0; frame < duration; ++frame)
-	{
-		m_Player->Update(AnimName, frame, AnimName, frame, 0.0f); 
-
-		// 定数バッファ更新（ボーン行列）
-		D3D11_MAPPED_SUBRESOURCE ms{};
-		ctx->Map(m_BoneConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &ms);
-		struct CB_BONE_MATRIX { XMFLOAT4X4 BoneMatrix[MAX_BONE_COUNT]; };
-		auto* cbBone = (CB_BONE_MATRIX*)ms.pData;
-		auto BoneNameToIndex = m_Player->GetBoneNameToIndex();
-
-		for (auto& pair : BoneNameToIndex)
-		{
-			unsigned int index = pair.second;
-			if (index >= MAX_BONE_COUNT) continue;
-			auto Bones = m_Player->GetBones();
-			XMMATRIX mat = ConvertAiMatrixToXMMatrix(Bones[pair.first].Matrix);
-			XMStoreFloat4x4(&cbBone->BoneMatrix[index], XMMatrixTranspose(mat));
-		}
-		ctx->Unmap(m_BoneConstantBuffer, 0);
-
-		// 各メッシュで CS を実行して結果をステージングへコピーして書き出す
-		for (UINT m = 0; m < numMeshes; ++m)
-		{
-			UINT numVertices = m_AiScene->mMeshes[m]->mNumVertices;
-			UINT groupCount = (numVertices + SKINNING_THREAD_GROUP_SIZE - 1) / SKINNING_THREAD_GROUP_SIZE;
-
-			// CS セット
-			ctx->CSSetShader(m_SkinningCS, nullptr, 0);
-			ctx->CSSetConstantBuffers(5, 1, &m_BoneConstantBuffer);
-			ctx->CSSetShaderResources(0, 1, &m_SkinInputSRV[m]);
-			ctx->CSSetUnorderedAccessViews(0, 1, &m_SkinOutputUAV[m], nullptr);
-
-			ctx->Dispatch(groupCount, 1, 1);
-
-			// GPU -> CPU ステージングへコピー
-			ctx->CopyResource(staging[m], m_SkinOutputBuffer[m]);
-
-			// Map してファイルへ書き出し
-			D3D11_MAPPED_SUBRESOURCE mapped{};
-			HRESULT hr = ctx->Map(staging[m], 0, D3D11_MAP_READ, 0, &mapped);
-			assert(SUCCEEDED(hr));
-			size_t bytes = sizeof(VERTEX_SKIN_OUT) * numVertices;
-			fwrite(mapped.pData, 1, bytes, f);
-			ctx->Unmap(staging[m], 0);
-
-			// CS のバインド解除
-			ID3D11UnorderedAccessView* nullUAV[1] = { nullptr };
-			ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
-			ctx->CSSetUnorderedAccessViews(0, 1, nullUAV, nullptr);
-			ctx->CSSetShaderResources(0, 1, nullSRV);
-			ctx->CSSetShader(nullptr, nullptr, 0);
-		}
-	}
-
-	fclose(f);
-
-	// クリーンアップ
-	for (auto b : staging) if (b) b->Release();
+		MAX_BONE_COUNT
+	);
 }
 
 //アニメーションベイクのロード
@@ -1074,6 +687,7 @@ bool AnimationModel::LoadBakedAnimation(const char* FilePath, const char* AnimNa
 	return true;
 }
 
+//ベイクしたアニメーションの解放
 void AnimationModel::ReleaseBakedAnimations()
 {
 	for (auto& pair : m_BakedBuffers)
@@ -1087,17 +701,20 @@ void AnimationModel::ReleaseBakedAnimations()
 	m_LastBakedFrame.clear();
 }
 
+//今フレームで何回コンピュートシェーダを呼んだか、どのアニメーションをベイク版で描画したか
 void AnimationModel::ResetDebugCounters()
 {
 	m_ComputeDispatchCount = 0;
 	m_AnimationUsedBaked.clear();
 }
 
+// コンピュートシェーダ呼び出し回数をインクリメント
 int AnimationModel::GetComputeDispatchCount() const
 {
 	return m_ComputeDispatchCount;
 }
 
+// アニメーション名を指定して、そのアニメーションでベイク版を使用したかどうかを取得
 bool AnimationModel::WasAnimationBakedThisFrame(const char* AnimName) const
 {
 	if (!AnimName) return false;
@@ -1106,3 +723,8 @@ bool AnimationModel::WasAnimationBakedThisFrame(const char* AnimName) const
 	return it->second;
 }
 
+int AnimationModel::GetTotalInstanceCount() const
+{
+	if (!m_InstanceManager) return 0;
+	return m_InstanceManager->GetTotalInstanceCount();
+}
