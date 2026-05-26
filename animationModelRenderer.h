@@ -21,4 +21,5 @@ public:
         UINT instanceCount,
         UINT indexCount
     );
+
 };

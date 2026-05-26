@@ -21,6 +21,8 @@ class ModelResource;
 class AnimationPlayer;
 class Player;
 class InstanceDataManager;
+class ComputeSkinningManager;
+class AnimationBakeManager;
 
 constexpr UINT MAX_MESHES = 32;
 constexpr UINT MAX_INSTANCE_COUNT = 3000;
@@ -45,13 +47,10 @@ class AnimationModel : public Component
 {
 private:
     const aiScene* m_AiScene = nullptr;
-    int m_IdleCount = 0;
-    int m_RunCount = 0;
 
     // 頂点・インデックスバッファ
     ID3D11Buffer** m_VertexBuffer = nullptr;
     ID3D11Buffer** m_IndexBuffer = nullptr;
-    std::unordered_map<std::string, ID3D11ShaderResourceView*> m_Texture;
 
     // CS スキニング用
     ID3D11Buffer* m_BoneConstantBuffer = nullptr;
@@ -59,14 +58,14 @@ private:
     ID3D11ShaderResourceView** m_SkinInputSRV = nullptr;
     ID3D11Buffer** m_SkinOutputBuffer = nullptr;
     ID3D11UnorderedAccessView** m_SkinOutputUAV = nullptr;
-    ID3D11ComputeShader* m_SkinningCS = nullptr;
+
+    ComputeSkinningManager* m_ComputeSkinningManager = nullptr;
 
 	// インスタンスデータ管理
     InstanceDataManager* m_InstanceManager = nullptr;
 
     ID3D11Buffer* m_SkinOutputBuffer_Idle[MAX_MESHES];
     ID3D11Buffer* m_SkinOutputBuffer_Run[MAX_MESHES];
-    int m_InstanceCount;
 
     // CS パス用シェーダー
     ID3D11InputLayout* m_CS_VertexLayout = nullptr;
@@ -90,10 +89,10 @@ private:
     ModelResource* m_Resource = nullptr;
     AnimationPlayer* m_Player = nullptr;
 
+    AnimationBakeManager* m_BakeManager = nullptr;
+
     // 内部処理
-    void CreateBone(aiNode* Node);
     void CreateComputeSkinningBuffers(VERTEX_3D* vertices, UINT vertexCount, unsigned int meshIndex);
-    void LoadComputeShader(const char* FileName);
     XMMATRIX ConvertAiMatrixToXMMatrix(const aiMatrix4x4& m);
     VERTEX_3D* GetVerticesFromMesh(aiMesh* mesh, unsigned int meshIndex);
 
@@ -110,6 +109,22 @@ private:
 
     void DrawCS();
     void DrawVS();
+
+    void DrawCSAnimation(
+        unsigned int meshIndex,
+        aiMesh* mesh,
+        const char* animName,
+        ID3D11Buffer* instanceBuffer,
+        UINT instanceCount
+    );
+
+    void DrawVSAnimation(
+        unsigned int meshIndex,
+        aiMesh* mesh,
+        ID3D11Buffer* instanceBuffer,
+        UINT instanceCount,
+        ID3D11ShaderResourceView* boneSRV
+    );
 
 public:
     AnimationModel() : m_Resource(nullptr) {}
