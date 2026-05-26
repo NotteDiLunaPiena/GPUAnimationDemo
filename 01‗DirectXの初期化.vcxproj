@@ -135,6 +135,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="animationModel.cpp" />
+    <ClCompile Include="animationModelRenderer.cpp" />
     <ClCompile Include="animationPlayer.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="field.cpp" />
@@ -146,6 +147,7 @@
     <ClCompile Include="imGUI\imgui_tables.cpp" />
     <ClCompile Include="imGUI\imgui_widgets.cpp" />
     <ClCompile Include="input.cpp" />
+    <ClCompile Include="instanceDataManager.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="manager.cpp" />
     <ClCompile Include="modelRenderer.cpp" />
@@ -158,6 +160,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="animationModel.h" />
+    <ClInclude Include="animationModelRenderer.h" />
     <ClInclude Include="animationPlayer.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="component.h" />
@@ -168,6 +171,7 @@
     <ClInclude Include="imGUI\backends\imgui_impl_win32.h" />
     <ClInclude Include="imGUI\imgui.h" />
     <ClInclude Include="input.h" />
+    <ClInclude Include="instanceDataManager.h" />
     <ClInclude Include="main.h" />
     <ClInclude Include="manager.h" />
     <ClInclude Include="modelRenderer.h" />

@@ -20,6 +20,7 @@
 class ModelResource;
 class AnimationPlayer;
 class Player;
+class InstanceDataManager;
 
 constexpr UINT MAX_MESHES = 32;
 constexpr UINT MAX_INSTANCE_COUNT = 3000;
@@ -60,13 +61,8 @@ private:
     ID3D11UnorderedAccessView** m_SkinOutputUAV = nullptr;
     ID3D11ComputeShader* m_SkinningCS = nullptr;
 
-    // インスタンスバッファ
-    ID3D11Buffer* m_InstanceBuffer = nullptr;
-    std::vector<InstanceData> m_InstanceData;
-    ID3D11Buffer* m_InstanceBufferIdle = nullptr;
-    std::vector<InstanceData> m_InstanceDataIdle;
-    ID3D11Buffer* m_InstanceBufferRun = nullptr;
-    std::vector<InstanceData> m_InstanceDataRun;
+	// インスタンスデータ管理
+    InstanceDataManager* m_InstanceManager = nullptr;
 
     ID3D11Buffer* m_SkinOutputBuffer_Idle[MAX_MESHES];
     ID3D11Buffer* m_SkinOutputBuffer_Run[MAX_MESHES];
@@ -132,7 +128,7 @@ public:
     void SetSkinningMode(SkinningMode mode) { m_SkinningMode = mode; }
     SkinningMode GetSkinningMode() const { return m_SkinningMode; }
 
-    int  GetTotalInstanceCount() const { return (int)(m_InstanceDataIdle.size() + m_InstanceDataRun.size()); }
+    int GetTotalInstanceCount() const;
     int  GetMeshCount() const;
 
     void BakeAnimationToDisk(const char* AnimName, const char* OutFilePath);
