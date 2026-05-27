@@ -209,10 +209,14 @@ void ModelRenderer::LoadObj( const char *FileName, MODEL_OBJ *ModelObj )
 	char c;
 
 
-	FILE *file;
-	file = fopen( FileName, "rt" );
-	assert(file);
+	FILE* file;
 
+	OutputDebugStringA("Open File : ");
+	OutputDebugStringA(FileName);
+	OutputDebugStringA("\n");
+
+	file = fopen(FileName, "rt");
+	assert(file);
 
 
 	//要素数カウント
