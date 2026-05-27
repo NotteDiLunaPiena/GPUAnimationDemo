@@ -1,25 +1,47 @@
+# =========================================
 # Visual Studio
+# =========================================
 .vs/
 *.VC.db
 *.VC.opendb
+*.vcxproj.user
 
-# ビルド生成物
+# =========================================
+# Build Files
+# =========================================
 Debug/
 Release/
 x64/
 x86/
 
-# 一時ファイル / キャッシュ
-*.obj
+# CMake
+out/
+build/
+
+# =========================================
+# Intermediate Files
+# =========================================
 *.pch
 *.pdb
 *.ilk
 *.idb
 *.log
+*.ipch
+*.tlog
 
-# 実行ファイル / DLL
-*.exe
-*.dll
+# Visual Studio Generated
+*.lastbuildstate
 
-# ユーザー依存設定
-*.vcxproj.user
+# =========================================
+# Ignore EXE only in build folders
+# =========================================
+Debug/*.exe
+Release/*.exe
+x64/*.exe
+
+# =========================================
+# Ignore DLL only in build folders
+# =========================================
+Debug/*.dll
+Release/*.dll
+x64/*.dll
