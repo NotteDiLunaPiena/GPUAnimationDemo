@@ -21,11 +21,12 @@ https://drive.google.com/file/d/1bW8DOSOcc-T0ENa3GiGIEUhziSRub3fh/view?usp=drive
 
 ### GPU Animation Demo
 
-（スクリーンショットを貼る）
+
+
 
 ### パフォーマンス比較
 
-（スクリーンショットを貼る）
+<img width="1280" height="720" alt="説明" src="https://github.com/user-attachments/assets/e894fd04-3ff7-4bff-9f35-25ec20b297ab" />
 
 ---
 
